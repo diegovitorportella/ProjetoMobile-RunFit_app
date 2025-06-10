@@ -53,8 +53,8 @@ class ActivityHistoryEntry {
   final double? latitude;
   final double? longitude;
   final List<Map<String, double>>? pathCoordinates;
-  final String? averagePace; // NOVO CAMPO: Para armazenar o pace médio formatado
-  final List<LoggedExercise>? loggedExercises; // NOVO CAMPO: Para detalhes de exercícios de musculação
+  final String? averagePace;
+  final List<LoggedExercise>? loggedExercises;
 
   ActivityHistoryEntry({
     required this.id,
@@ -70,7 +70,7 @@ class ActivityHistoryEntry {
     this.longitude,
     this.pathCoordinates,
     this.averagePace,
-    this.loggedExercises, // Adicione ao construtor
+    this.loggedExercises,
   });
 
   Map<String, dynamic> toJson() {
@@ -88,11 +88,26 @@ class ActivityHistoryEntry {
       'longitude': longitude,
       'pathCoordinates': pathCoordinates,
       'averagePace': averagePace,
-      'loggedExercises': loggedExercises?.map((e) => e.toJson()).toList(), // Adicione ao toJson
+      'loggedExercises': loggedExercises?.map((e) => e.toJson()).toList(),
     };
   }
 
   factory ActivityHistoryEntry.fromJson(Map<String, dynamic> json) {
+    // Tratamento para pathCoordinates: converter List<dynamic> para List<Map<String, double>>
+    final List<dynamic>? rawPathCoordinates = json['pathCoordinates'] as List<dynamic>?;
+    final List<Map<String, double>>? parsedPathCoordinates = rawPathCoordinates?.map((e) {
+      // Garante que cada item da lista seja um Map<String, dynamic> antes de converter para Map<String, double>
+      return Map<String, double>.from(e as Map);
+    }).toList();
+
+    // Tratamento para loggedExercises: converter List<dynamic> para List<LoggedExercise>
+    final List<dynamic>? rawLoggedExercises = json['loggedExercises'] as List<dynamic>?;
+    final List<LoggedExercise>? parsedLoggedExercises = rawLoggedExercises?.map((e) {
+      // Garante que cada item da lista seja um Map<String, dynamic> antes de chamar LoggedExercise.fromJson
+      return LoggedExercise.fromJson(Map<String, dynamic>.from(e as Map));
+    }).toList();
+
+
     return ActivityHistoryEntry(
       id: json['id'],
       date: DateTime.parse(json['date']),
@@ -105,13 +120,10 @@ class ActivityHistoryEntry {
       notes: json['notes'],
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
-      pathCoordinates: (json['pathCoordinates'] as List?)
-          ?.map((e) => Map<String, double>.from(e as Map))
-          .toList(),
+      // Use os valores parseados aqui:
+      pathCoordinates: parsedPathCoordinates, // <--- Use o valor parseado
       averagePace: json['averagePace'],
-      loggedExercises: (json['loggedExercises'] as List?) // Adicione ao fromJson
-          ?.map((e) => LoggedExercise.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      loggedExercises: parsedLoggedExercises, // <--- Use o valor parseado
     );
   }
 }

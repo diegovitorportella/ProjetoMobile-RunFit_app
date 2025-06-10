@@ -1,17 +1,25 @@
 // lib/main.dart
 
 import 'package:flutter/material.dart';
-// Remova a importação de splash_screen.dart
-// import 'package:runfit_app/screens/splash_screen.dart'; // Remova ou comente esta linha
-import 'package:runfit_app/screens/onboarding_screen.dart'; // Certifique-se de que esta importação existe
+import 'package:runfit_app/screens/onboarding_screen.dart';
 import 'package:runfit_app/utils/app_colors.dart';
 import 'package:runfit_app/utils/app_text_input_themes.dart';
 import 'package:runfit_app/utils/app_styles.dart';
 import 'package:runfit_app/services/achievement_service.dart';
 import 'package:runfit_app/services/goal_service.dart';
 
+// ADICIONE ESTAS DUAS IMPORTAÇÕES
+import 'package:firebase_core/firebase_core.dart'; //
+import 'firebase_options.dart'; //
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // INICIALIZE O FIREBASE AQUI
+  await Firebase.initializeApp( //
+    options: DefaultFirebaseOptions.currentPlatform, //
+  );
+
   await AchievementService().initializeAchievements();
   await GoalService().initializeGoals();
   runApp(const MyApp());
@@ -65,7 +73,7 @@ class MyApp extends StatelessWidget {
           textStyle: AppStyles.bodyStyle.copyWith(color: AppColors.textPrimaryColor),
         ),
       ),
-      home: const OnboardingScreen(), // NOVO: Inicia diretamente com a OnboardingScreen
+      home: const OnboardingScreen(),
     );
   }
 }

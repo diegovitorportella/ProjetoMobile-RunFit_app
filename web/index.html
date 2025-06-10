@@ -1,38 +1,46 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="A new Flutter project.">
 
-  <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="runfit_app">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
-  <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
   <title>runfit_app</title>
   <link rel="manifest" href="manifest.json">
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-analytics-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script>
+    // Sua configuração do Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyC4RN-0N29ZQBw5tVvPHqYKPEfPumU64A",
+      authDomain: "runfitapp-57a83.firebaseapp.com",
+      projectId: "runfitapp-57a83",
+      storageBucket: "runfitapp-57a83.appspot.com",
+      messagingSenderId: "576070748804",
+      appId: "1:576070748804:web:e8a56b37e56d7e073a90d1",
+      measurementId: "G-ZLZLKKX6CJP", // measurementId é opcional para v7.20.0 e posteriores
+      databaseURL: "https://runfitapp-57a83-default-rtdb.firebaseio.com" // <--- ADICIONE ESTA LINHA
+    };
+
+    // Inicialize o Firebase
+    const app = firebase.initializeApp(firebaseConfig);
+    const analytics = firebase.analytics(); // Inicialize o Analytics se estiver usando
+    // Opcional: Se você estiver usando o Realtime Database, pode ser útil ter uma referência
+    // const database = firebase.database(app);
+  </script>
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+<script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

@@ -13,12 +13,15 @@ import 'package:runfit_app/data/models/activity_history_entry.dart';
 import 'package:uuid/uuid.dart';
 import 'package:runfit_app/screens/activity_history_screen.dart';
 import 'package:runfit_app/services/achievement_service.dart';
-import 'package:runfit_app/data/models/achievement.dart'; // Certifique-se de que está importado
+import 'package:runfit_app/data/models/achievement.dart';
 import 'package:runfit_app/screens/profile_screen.dart';
 import 'package:runfit_app/screens/achievements_screen.dart';
 import 'package:runfit_app/screens/activity_selection_screen.dart';
-import 'package:runfit_app/services/goal_service.dart'; // NOVO: Importar GoalService
-import 'package:runfit_app/data/models/goal.dart'; // NOVO: Importar modelo Goal
+import 'package:runfit_app/services/goal_service.dart';
+import 'package:runfit_app/data/models/goal.dart';
+// Importação do Firebase Realtime Database
+import 'package:firebase_database/firebase_database.dart'; // <--- ADICIONE ESTA LINHA
+
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback? onNavigateToWorkoutSheets;
@@ -39,7 +42,11 @@ class _HomeScreenState extends State<HomeScreen> {
   WorkoutSheet? _activeWorkoutSheet;
   final Uuid _uuid = const Uuid();
   final AchievementService _achievementService = AchievementService();
-  final GoalService _goalService = GoalService(); // NOVO: Instanciar GoalService
+  final GoalService _goalService = GoalService();
+
+  // Referência ao banco de dados Realtime Database
+  final DatabaseReference _activitiesRef = FirebaseDatabase.instance.ref('activities'); // <--- ADICIONE ESTA LINHA
+
 
   @override
   void initState() {
@@ -156,6 +163,21 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // Função para salvar uma atividade no Firebase Realtime Database
+  Future<void> _saveActivityToFirebase(ActivityHistoryEntry newEntry) async { // <--- ADICIONE ESTA FUNÇÃO
+    try {
+      final newActivityKey = _activitiesRef.push().key; // Gera um ID único
+
+      if (newActivityKey != null) {
+        await _activitiesRef.child(newActivityKey).set(newEntry.toJson());
+        // print('Ficha de treino salva no Firebase com a chave: $newActivityKey'); // Opcional para depuração
+      }
+    } catch (e) {
+      print('Erro ao salvar ficha de treino no Firebase: $e');
+      // Considere adicionar feedback ao usuário aqui
+    }
+  }
+
   Future<void> _completeWorkoutSheet() async {
     if (_activeWorkoutSheet != null) {
       bool allCompleted = _activeWorkoutSheet!.exercises.every((e) => e.isCompleted);
@@ -186,10 +208,22 @@ class _HomeScreenState extends State<HomeScreen> {
         durationMinutes: null,
         distanceKm: null,
         notes: 'Ficha de treino concluída: ${_activeWorkoutSheet!.name}',
+        // Para fichas de treino, pathCoordinates e averagePace não se aplicam diretamente
+        pathCoordinates: null,
+        averagePace: null,
+        // Se a ficha de treino incluir exercícios detalhados (que você deseja salvar no histórico)
+        // você precisaria mapear os exercícios do WorkoutSheet para LoggedExercise aqui.
+        // Por agora, vamos assumir que WorkoutSheetData (JSON completo) já é suficiente.
+        loggedExercises: null, // Ou mapeie se necessário para o histórico
       );
 
+      // Salva no SharedPreferences
       historyJsonList.add(jsonEncode(newEntry.toJson()));
       await prefs.setStringList(SharedPreferencesKeys.activityHistory, historyJsonList);
+
+      // Salva no Firebase Realtime Database
+      await _saveActivityToFirebase(newEntry); // <--- CHAMADA AQUI!
+
 
       final currentCompleted = prefs.getInt(SharedPreferencesKeys.completedWorkoutsThisWeek) ?? 0;
       await prefs.setInt(SharedPreferencesKeys.completedWorkoutsThisWeek, currentCompleted + 1);
@@ -270,7 +304,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // NOVO MÉTODO: Exibe um diálogo de meta concluída
   void _showGoalCompletedDialog(Goal goal) {
     showDialog(
       context: context,
@@ -318,7 +351,7 @@ class _HomeScreenState extends State<HomeScreen> {
     ).then((_) {
       _loadUserPreferences();
       _loadActiveWorkoutSheet();
-      _goalService.initializeGoals(); // Recarrega metas para atualizar a UI caso o progresso tenha mudado
+      _goalService.initializeGoals();
     });
   }
 
@@ -565,10 +598,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 24),
                 Center(
-                  child: ElevatedButton(
+                  child: FloatingActionButton.extended(
                     onPressed: _navigateToActivityLog,
-                    style: AppStyles.buttonStyle,
-                    child: Text('Registrar Nova Atividade Avulsa', style: AppStyles.buttonTextStyle),
+                    label: Text(
+                      'Registrar Nova Atividade Avulsa',
+                      style: AppStyles.buttonTextStyle.copyWith(
+                        fontSize: 16,
+                        color: AppColors.primaryColor,
+                      ),
+                    ),
+                    icon: const Icon(
+                      Icons.add,
+                      color: AppColors.primaryColor,
+                    ),
+                    backgroundColor: AppColors.successColor,
                   ),
                 ),
               ],

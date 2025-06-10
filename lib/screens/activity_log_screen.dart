@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:convert';
+// Importação do Firebase Realtime Database
+import 'package:firebase_database/firebase_database.dart'; // <--- ADICIONE ESTA LINHA
 
 import 'package:runfit_app/utils/app_colors.dart';
 import 'package:runfit_app/utils/app_styles.dart';
@@ -36,7 +38,10 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
 
   final Uuid _uuid = const Uuid();
   final AchievementService _achievementService = AchievementService();
-  final GoalService _goalService = GoalService(); // NOVO: Instanciar GoalService
+  final GoalService _goalService = GoalService();
+
+  // Referência ao banco de dados Realtime Database
+  final DatabaseReference _activitiesRef = FirebaseDatabase.instance.ref('activities'); // <--- ADICIONE ESTA LINHA
 
   @override
   void initState() {
@@ -227,6 +232,22 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
     });
   }
 
+  // Função para salvar uma atividade no Firebase Realtime Database
+  Future<void> _saveActivityToFirebase(ActivityHistoryEntry newEntry) async { // <--- ADICIONE ESTA FUNÇÃO
+    try {
+      final newActivityKey = _activitiesRef.push().key; // Gera um ID único
+
+      if (newActivityKey != null) {
+        await _activitiesRef.child(newActivityKey).set(newEntry.toJson());
+        // print('Atividade salva no Firebase com a chave: $newActivityKey'); // Opcional para depuração
+      }
+    } catch (e) {
+      print('Erro ao salvar atividade no Firebase: $e');
+      // Considere adicionar feedback ao usuário aqui
+    }
+  }
+
+
   Future<void> _saveActivity() async {
     if (_formKey.currentState!.validate()) {
       if (_currentModality == WorkoutModality.musculacao.name && _loggedExercises.isEmpty) {
@@ -257,8 +278,13 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
         loggedExercises: _currentModality == WorkoutModality.musculacao.name ? _loggedExercises : null,
       );
 
+      // Salva no SharedPreferences
       historyJsonList.add(json.encode(newEntry.toJson()));
       await prefs.setStringList(SharedPreferencesKeys.activityHistory, historyJsonList);
+
+      // Salva no Firebase Realtime Database // <--- CHAMADA AQUI!
+      await _saveActivityToFirebase(newEntry);
+
 
       final currentCompleted = prefs.getInt(SharedPreferencesKeys.completedWorkoutsThisWeek) ?? 0;
       await prefs.setInt(SharedPreferencesKeys.completedWorkoutsThisWeek, currentCompleted + 1);
@@ -272,8 +298,6 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
       final newlyCompletedGoals = await _goalService.updateGoalsProgress(
         modality: _currentModality,
         durationMinutes: double.tryParse(_durationController.text),
-        // Se for musculação, você pode adicionar a lógica para passar a carga total aqui
-        // Por enquanto, não estamos somando cargas individuais de exercícios na meta service
       );
       if (mounted) {
         for (var goal in newlyCompletedGoals) {
@@ -332,7 +356,6 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
     );
   }
 
-  // NOVO MÉTODO: Exibe um diálogo de meta concluída
   void _showGoalCompletedDialog(Goal goal) {
     showDialog(
       context: context,
@@ -373,7 +396,6 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ... (restante do método build, não precisa ser alterado aqui)
     return Scaffold(
       appBar: AppBar(
         title: Text(

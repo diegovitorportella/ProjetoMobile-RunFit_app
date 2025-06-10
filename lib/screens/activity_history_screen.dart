@@ -15,6 +15,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 
+// Importação do Firebase Realtime Database
+import 'package:firebase_database/firebase_database.dart';
+import 'dart:async'; // Necessário para StreamSubscription
 
 class ActivityHistoryScreen extends StatefulWidget {
   const ActivityHistoryScreen({super.key});
@@ -25,19 +28,19 @@ class ActivityHistoryScreen extends StatefulWidget {
 
 class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   List<ActivityHistoryEntry> _activityHistory = [];
-  List<ActivityHistoryEntry> _filteredActivityHistory = []; // NOVO: Lista filtrada
+  List<ActivityHistoryEntry> _filteredActivityHistory = [];
   bool _isLoading = true;
 
-  // NOVO: Variáveis de estado para os filtros
+  // Variáveis de estado para os filtros
   DateTime? _startDateFilter;
   DateTime? _endDateFilter;
-  String? _selectedModalityFilter; // 'corrida', 'musculacao', 'ambos' ou null (todos)
-  String? _selectedActivityTypeFilter; // 'Avulsa', 'Ficha de Treino' ou null (todos)
+  String? _selectedModalityFilter;
+  String? _selectedActivityTypeFilter;
   double? _minDurationFilter;
   double? _maxDurationFilter;
   double? _minDistanceFilter;
   double? _maxDistanceFilter;
-  String? _workoutSheetNameFilter; // Para filtrar por nome de ficha
+  String? _workoutSheetNameFilter;
 
   // Controladores de texto para campos numéricos de filtro
   final TextEditingController _minDurationController = TextEditingController();
@@ -46,10 +49,16 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   final TextEditingController _maxDistanceController = TextEditingController();
   final TextEditingController _workoutSheetNameController = TextEditingController();
 
+  // Referência e Subscription para o Firebase Realtime Database
+  late DatabaseReference _activitiesRef;
+  StreamSubscription<DatabaseEvent>? _activitiesSubscription;
+
+
   @override
   void initState() {
     super.initState();
-    _loadActivityHistory();
+    _activitiesRef = FirebaseDatabase.instance.ref('activities');
+    _loadActivitiesFromFirebase();
     _minDurationController.addListener(_applyFilters);
     _maxDurationController.addListener(_applyFilters);
     _minDistanceController.addListener(_applyFilters);
@@ -64,21 +73,64 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     _minDistanceController.dispose();
     _maxDistanceController.dispose();
     _workoutSheetNameController.dispose();
+    _activitiesSubscription?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadActivityHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    List<String> historyJsonList = prefs.getStringList(SharedPreferencesKeys.activityHistory) ?? [];
+  // Remova ou comente a função _loadActivityHistory() se você não quiser mais usar o SharedPreferences como fonte primária
+  // Future<void> _loadActivityHistory() async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   List<String> historyJsonList = prefs.getStringList(SharedPreferencesKeys.activityHistory) ?? [];
+  //   setState(() {
+  //     _activityHistory = historyJsonList.map((jsonString) => ActivityHistoryEntry.fromJson(json.decode(jsonString))).toList();
+  //     _activityHistory.sort((a, b) => b.date.compareTo(a.date));
+  //     _filteredActivityHistory = List.from(_activityHistory);
+  //     _isLoading = false;
+  //   });
+  // }
+
+  // Função para carregar atividades do Firebase Realtime Database
+  Future<void> _loadActivitiesFromFirebase() async {
     setState(() {
-      _activityHistory = historyJsonList.map((jsonString) => ActivityHistoryEntry.fromJson(json.decode(jsonString))).toList();
-      _activityHistory.sort((a, b) => b.date.compareTo(a.date)); // Ordena do mais recente para o mais antigo
-      _filteredActivityHistory = List.from(_activityHistory); // Inicialmente, filtrado é igual a todo o histórico
-      _isLoading = false;
+      _isLoading = true;
     });
+    try {
+      // Ouve mudanças nos dados em tempo real
+      _activitiesSubscription = _activitiesRef.onValue.listen((event) {
+        final data = event.snapshot.value;
+        if (data != null) {
+          // Firebase retorna um Map<dynamic, dynamic> que pode ser LinkedMap.
+          // Converte para Map<String, dynamic> de forma segura.
+          final Map<String, dynamic> activitiesMap = Map<String, dynamic>.from(data as Map);
+
+          List<ActivityHistoryEntry> fetchedActivities = [];
+          activitiesMap.forEach((key, value) {
+            // Garante que 'value' é um Map antes de passar para fromJson
+            fetchedActivities.add(ActivityHistoryEntry.fromJson(Map<String, dynamic>.from(value)));
+          });
+          setState(() {
+            _activityHistory = fetchedActivities;
+            _activityHistory.sort((a, b) => b.date.compareTo(a.date)); // Ordena do mais recente
+            _applyFilters(); // Reaplica os filtros sempre que os dados mudam
+            _isLoading = false;
+          });
+        } else {
+          setState(() {
+            _activityHistory = [];
+            _filteredActivityHistory = [];
+            _isLoading = false;
+          });
+        }
+      });
+    } catch (e) {
+      print('Erro ao carregar atividades do Firebase: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
-  // NOVO: Método para aplicar todos os filtros
+
   void _applyFilters() {
     setState(() {
       _filteredActivityHistory = _activityHistory.where((entry) {
@@ -147,7 +199,6 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     });
   }
 
-  // NOVO: Método para resetar os filtros
   void _resetFilters() {
     setState(() {
       _startDateFilter = null;
@@ -159,11 +210,10 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       _minDistanceController.clear();
       _maxDistanceController.clear();
       _workoutSheetNameController.clear();
-      _applyFilters(); // Reaplica os filtros para mostrar tudo
+      _applyFilters();
     });
   }
 
-  // NOVO: Exibe o modal de filtros
   void _showFilterModal() {
     showModalBottomSheet(
       context: context,
@@ -223,14 +273,14 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                                             return Theme(
                                               data: Theme.of(context).copyWith(
                                                 colorScheme: ColorScheme.dark(
-                                                  primary: AppColors.accentColor, // Cor de destaque do seletor
-                                                  onPrimary: AppColors.textPrimaryColor, // Cor do texto sobre a cor de destaque
-                                                  surface: AppColors.cardColor, // Cor de fundo do calendário
-                                                  onSurface: AppColors.textPrimaryColor, // Cor do texto no calendário
+                                                  primary: AppColors.accentColor,
+                                                  onPrimary: AppColors.textPrimaryColor,
+                                                  surface: AppColors.cardColor,
+                                                  onSurface: AppColors.textPrimaryColor,
                                                 ),
                                                 textButtonTheme: TextButtonThemeData(
                                                   style: TextButton.styleFrom(
-                                                    foregroundColor: AppColors.accentColor, // Cor dos botões "CANCELAR", "OK"
+                                                    foregroundColor: AppColors.accentColor,
                                                   ),
                                                 ),
                                               ),
@@ -296,7 +346,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                                       style: AppStyles.buttonStyle.copyWith(
                                         padding: MaterialStateProperty.all(const EdgeInsets.symmetric(vertical: 12)),
                                         backgroundColor: MaterialStateProperty.all(AppColors.cardColor),
-                                        side: MaterialStateProperty.all(BorderSide(color: AppColors.borderColor)),
+                                        side: MaterialStateProperty.all(BorderSide(color: AppColors.borderColor)), // Corrigido aqui
                                       ),
                                       child: Text(
                                         _endDateFilter == null
@@ -421,7 +471,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                               Center(
                                 child: ElevatedButton(
                                   onPressed: () {
-                                    _resetFilters(); // Reseta e fecha o modal
+                                    _resetFilters();
                                     Navigator.of(context).pop();
                                   },
                                   style: AppStyles.buttonStyle.copyWith(
@@ -453,7 +503,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       return [];
     }
     final Map<String, int> modalityCounts = {};
-    for (var entry in _filteredActivityHistory) { // Usa a lista filtrada
+    for (var entry in _filteredActivityHistory) {
       modalityCounts[entry.modality] = (modalityCounts[entry.modality] ?? 0) + 1;
     }
     final List<Color> pieColors = [
@@ -468,7 +518,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     return modalityCounts.entries.map((entry) {
       final String modality = entry.key;
       final int count = entry.value;
-      final double percentage = (count / _filteredActivityHistory.length) * 100; // Usa a lista filtrada
+      final double percentage = (count / _filteredActivityHistory.length) * 100;
       String formattedModality = modality.replaceAllMapped(RegExp(r'([A-Z])'), (match) => ' ${match.group(1)}').toTitleCase();
       final color = pieColors[colorIndex % pieColors.length];
       colorIndex++;
@@ -494,7 +544,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       return [];
     }
     final Map<String, double> modalityDurations = {};
-    for (var entry in _filteredActivityHistory) { // Usa a lista filtrada
+    for (var entry in _filteredActivityHistory) {
       if (entry.durationMinutes != null) {
         modalityDurations[entry.modality] = (modalityDurations[entry.modality] ?? 0) + entry.durationMinutes!;
       }
@@ -539,7 +589,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   String _formatDuration(double? durationMinutes) {
     if (durationMinutes == null) return 'N/A';
 
-    final totalSeconds = (durationMinutes * 60).round(); // Converte minutos para segundos
+    final totalSeconds = (durationMinutes * 60).round();
     final duration = Duration(seconds: totalSeconds);
 
     String twoDigits(int n) => n.toString().padLeft(2, '0');
@@ -560,7 +610,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       appBar: AppBar(
         title: Text('Histórico de Atividades', style: AppStyles.titleTextStyle.copyWith(fontSize: 22)),
         actions: [
-          IconButton( // NOVO: Botão para abrir o modal de filtros
+          IconButton(
             icon: const Icon(Icons.filter_list),
             onPressed: _showFilterModal,
             tooltip: 'Filtrar Histórico',
@@ -569,7 +619,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _filteredActivityHistory.isEmpty // Usa a lista filtrada para verificar se está vazia
+          : _filteredActivityHistory.isEmpty
           ? Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -579,11 +629,11 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
               Text(
                 _activityHistory.isEmpty
                     ? 'Nenhuma atividade registrada ainda. Que tal começar a treinar?'
-                    : 'Nenhum resultado encontrado para os filtros aplicados.', // Mensagem para filtros
+                    : 'Nenhum resultado encontrado para os filtros aplicados.',
                 style: AppStyles.bodyStyle.copyWith(color: AppColors.textSecondaryColor),
                 textAlign: TextAlign.center,
               ),
-              if (_activityHistory.isNotEmpty) // Se há atividades, mas nenhuma com filtro
+              if (_activityHistory.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 16.0),
                   child: ElevatedButton(
@@ -677,9 +727,9 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
             ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: _filteredActivityHistory.length, // Usa a lista filtrada
+              itemCount: _filteredActivityHistory.length,
               itemBuilder: (context, index) {
-                final entry = _filteredActivityHistory[index]; // Usa a lista filtrada
+                final entry = _filteredActivityHistory[index];
                 // Condição para exibir o mapa: Modalidade Corrida e ter coordenadas
                 final bool showMap = entry.modality == WorkoutModality.corrida.name &&
                     entry.pathCoordinates != null &&
@@ -688,7 +738,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                 // Dados para o mapa (se houver)
                 List<LatLng> pathPoints = [];
                 LatLng? mapCenter;
-                List<Marker> mapMarkers = []; // Para início e fim
+                List<Marker> mapMarkers = [];
 
                 if (showMap) {
                   pathPoints = entry.pathCoordinates!
@@ -696,7 +746,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                       .toList();
 
                   if (pathPoints.isNotEmpty) {
-                    mapCenter = pathPoints.first; // Centro inicial será o primeiro ponto
+                    mapCenter = pathPoints.first;
 
                     // Adicionar marcadores para início e fim
                     mapMarkers.add(
@@ -730,7 +780,6 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                   ),
                   child: InkWell(
                     onTap: () {
-                      // Ao tocar no card, ainda navegamos para a tela de detalhes completa
                       Navigator.push(
                         context,
                         MaterialPageRoute(

@@ -17,8 +17,10 @@ import 'package:runfit_app/data/models/achievement.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
-import 'package:runfit_app/services/goal_service.dart'; // NOVO: Importar GoalService
-import 'package:runfit_app/data/models/goal.dart'; // NOVO: Importar modelo Goal
+import 'package:runfit_app/services/goal_service.dart';
+import 'package:runfit_app/data/models/goal.dart';
+// Importação do Firebase Realtime Database
+import 'package:firebase_database/firebase_database.dart'; // <--- ADICIONE ESTA LINHA
 
 
 class RunTrackingScreen extends StatefulWidget {
@@ -45,7 +47,11 @@ class _RunTrackingScreenState extends State<RunTrackingScreen> {
 
   final Uuid _uuid = const Uuid();
   final AchievementService _achievementService = AchievementService();
-  final GoalService _goalService = GoalService(); // NOVO: Instanciar GoalService
+  final GoalService _goalService = GoalService();
+
+  // Referência ao banco de dados Realtime Database
+  final DatabaseReference _activitiesRef = FirebaseDatabase.instance.ref('activities'); // <--- ADICIONE ESTA LINHA
+
 
   @override
   void dispose() {
@@ -198,6 +204,21 @@ class _RunTrackingScreenState extends State<RunTrackingScreen> {
     }
   }
 
+  // Função para salvar uma atividade no Firebase Realtime Database
+  Future<void> _saveActivityToFirebase(ActivityHistoryEntry newEntry) async { // <--- ADICIONE ESTA FUNÇÃO
+    try {
+      final newActivityKey = _activitiesRef.push().key; // Gera um ID único
+
+      if (newActivityKey != null) {
+        await _activitiesRef.child(newActivityKey).set(newEntry.toJson());
+        // print('Atividade de corrida salva no Firebase com a chave: $newActivityKey'); // Opcional para depuração
+      }
+    } catch (e) {
+      print('Erro ao salvar atividade de corrida no Firebase: $e');
+      // Considere adicionar feedback ao usuário aqui
+    }
+  }
+
   void _stopAndSaveTracking() async {
     if (!_isTracking && _elapsedSeconds == 0) return;
 
@@ -297,8 +318,13 @@ class _RunTrackingScreenState extends State<RunTrackingScreen> {
           averagePace: averagePace,
         );
 
+        // Salva no SharedPreferences
         historyJsonList.add(json.encode(newEntry.toJson()));
         await prefs.setStringList(SharedPreferencesKeys.activityHistory, historyJsonList);
+
+        // Salva no Firebase Realtime Database
+        await _saveActivityToFirebase(newEntry); // <--- CHAMADA AQUI!
+
 
         final currentCompleted = prefs.getInt(SharedPreferencesKeys.completedWorkoutsThisWeek) ?? 0;
         await prefs.setInt(SharedPreferencesKeys.completedWorkoutsThisWeek, currentCompleted + 1);
@@ -536,10 +562,10 @@ class _RunTrackingScreenState extends State<RunTrackingScreen> {
           ),
           // Seção de Estatísticas e Botões
           Expanded(
-            flex: 1, // NOVO: Alterado de flex: 1 para flex: 1 (já estava 1)
-            child: SingleChildScrollView( // NOVO: Envolvendo a Padding com SingleChildScrollView
+            flex: 1,
+            child: SingleChildScrollView(
               padding: const EdgeInsets.all(16.0),
-              child: Column( // This is the column that was overflowing
+              child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
@@ -550,7 +576,7 @@ class _RunTrackingScreenState extends State<RunTrackingScreen> {
                     formattedTime,
                     style: AppStyles.titleTextStyle.copyWith(fontSize: 60, color: AppColors.accentColor, fontWeight: FontWeight.w300),
                   ),
-                  const Spacer(),
+                  const SizedBox(height: 32),
 
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -581,7 +607,7 @@ class _RunTrackingScreenState extends State<RunTrackingScreen> {
                       ),
                     ],
                   ),
-                  const Spacer(),
+                  const SizedBox(height: 32),
 
                   if (!_isTracking && _elapsedSeconds == 0)
                     ElevatedButton.icon(

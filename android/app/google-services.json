@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "576070748804",
+    "project_id": "runfitapp-57a83",
+    "storage_bucket": "runfitapp-57a83.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:576070748804:android:6a2ece8778ec547e3a90d1",
+        "android_client_info": {
+          "package_name": "com.example.runfit_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAYxScEr5IMTu0gOXY66TiI_St3V78jK7g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

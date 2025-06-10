@@ -1,8 +1,12 @@
+// android/app/build.gradle.kts
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+
+    // Adicione o plugin do Google services Gradle
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -41,4 +45,21 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Importe o Firebase BoM (Bill of Materials)
+    implementation(platform("com.google.firebase:firebase-bom:33.1.0"))
+
+    // TODO: Adicione as dependências para os produtos Firebase que você deseja usar
+    // Quando usar o BoM, não especifique versões nas dependências do Firebase
+
+    // Exemplo de adição de Firebase Analytics (já no seu projeto)
+    implementation("com.google.firebase:firebase-analytics")
+
+    // Para o Realtime Database, adicione:
+    implementation("com.google.firebase:firebase-database-ktx")
+
+    // Adicione as dependências para quaisquer outros produtos Firebase desejados
+    // https://firebase.google.com/docs/android/setup#available-libraries
 }
