@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:intl/intl.dart';
-import 'package:runfit_app/data/models/goal.dart'; // Importa o modelo Goal
+import 'package:runfit_app/data/models/goal.dart';
 import 'package:runfit_app/utils/app_colors.dart';
 import 'package:runfit_app/utils/app_styles.dart';
-import 'package:runfit_app/utils/app_constants.dart'; // Para os enums e StringCasingExtension
+import 'package:runfit_app/utils/app_constants.dart';
+import 'package:runfit_app/services/goal_service.dart';
+import 'package:firebase_database/firebase_database.dart';
+
 
 class GoalsScreen extends StatefulWidget {
   const GoalsScreen({super.key});
@@ -17,46 +20,18 @@ class GoalsScreen extends StatefulWidget {
 }
 
 class _GoalsScreenState extends State<GoalsScreen> {
-  List<Goal> _userGoals = [];
-  bool _isLoading = true;
+  final GoalService _goalService = GoalService();
+
+  late Stream<DatabaseEvent> _goalsStream;
+
 
   @override
   void initState() {
     super.initState();
-    _loadUserGoals();
+    _goalService.initializeGoals();
+    _goalsStream = FirebaseDatabase.instance.ref('users/${FirebaseConstants.userId}/goals').onValue;
   }
 
-  Future<void> _loadUserGoals() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? goalsJson = prefs.getString(SharedPreferencesKeys.userGoalsList);
-
-    if (goalsJson != null) {
-      final List<dynamic> jsonList = jsonDecode(goalsJson);
-      setState(() {
-        _userGoals = jsonList.map((json) => Goal.fromJson(json)).toList();
-        _userGoals.sort((a, b) {
-          // Concluídas para o final da lista, em andamento para o início
-          if (a.isCompleted && !b.isCompleted) return 1;
-          if (!a.isCompleted && b.isCompleted) return -1;
-          // Dentro de cada grupo, as mais recentes primeiro
-          return b.createdAt.compareTo(a.createdAt);
-        });
-        _isLoading = false;
-      });
-    } else {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _saveUserGoals() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String jsonString = jsonEncode(_userGoals.map((goal) => goal.toJson()).toList());
-    await prefs.setString(SharedPreferencesKeys.userGoalsList, jsonString);
-  }
-
-  // NOVO: Método para exibir o formulário de criação/edição de meta
   void _showGoalFormModal({Goal? goal}) async {
     final TextEditingController nameController = TextEditingController(text: goal?.name);
     GoalType? selectedType = goal?.type;
@@ -67,7 +42,6 @@ class _GoalsScreenState extends State<GoalsScreen> {
 
     final _goalFormKey = GlobalKey<FormState>();
 
-    // Define as unidades disponíveis com base no tipo de meta
     List<GoalUnit> _getUnitsForGoalType(GoalType type) {
       switch (type) {
         case GoalType.distance:
@@ -79,7 +53,10 @@ class _GoalsScreenState extends State<GoalsScreen> {
         case GoalType.frequency:
           return [GoalUnit.times];
         case GoalType.workoutSheetCompletion:
-          return [GoalUnit.none]; // Nenhuma unidade para conclusão de ficha
+          return [GoalUnit.none];
+      // Adicionando um caso default para garantir que todos os GoalType são tratados
+        default:
+          return [GoalUnit.none]; // Retorno padrão se um novo GoalType for adicionado e não tratado
       }
     }
 
@@ -171,9 +148,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
                                   onChanged: (value) {
                                     modalSetState(() {
                                       selectedType = value;
-                                      selectedUnit = null; // Reseta a unidade ao mudar o tipo
+                                      selectedUnit = null;
                                       if (selectedType == GoalType.workoutSheetCompletion) {
-                                        targetValueController.text = '1.0'; // Define 1 para conclusão de ficha
+                                        targetValueController.text = '1.0';
                                         selectedUnit = GoalUnit.none;
                                       } else {
                                         targetValueController.clear();
@@ -222,7 +199,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                                             ? []
                                             : _getUnitsForGoalType(selectedType!).map((unit) {
                                           String formattedUnit;
-                                          switch (unit) {
+                                          switch (unit) { // <--- CORRIGIDO AQUI: CASES DEVEM SER MEMBROS DE GOALUNIT
                                             case GoalUnit.km:
                                               formattedUnit = 'Km';
                                               break;
@@ -238,17 +215,21 @@ class _GoalsScreenState extends State<GoalsScreen> {
                                             case GoalUnit.hours:
                                               formattedUnit = 'Horas';
                                               break;
-                                            case GoalUnit.kg:
+                                            case GoalUnit.kg: // <--- CORRIGIDO
                                               formattedUnit = 'Kg';
                                               break;
-                                            case GoalUnit.lbs:
+                                            case GoalUnit.lbs: // <--- CORRIGIDO
                                               formattedUnit = 'Lbs';
                                               break;
-                                            case GoalUnit.times:
+                                            case GoalUnit.times: // <--- CORRIGIDO
                                               formattedUnit = 'Vezes';
                                               break;
                                             case GoalUnit.none:
-                                              formattedUnit = 'N/A'; // Ou vazio, dependendo do contexto
+                                              formattedUnit = 'N/A';
+                                              break;
+                                          // Adicionar um default ou cobrir todos os casos possíveis do enum
+                                            default: // <--- ADICIONADO PARA TRATAR O ERRO DE NÃO-EXAUSTÃO (se houver)
+                                              formattedUnit = unit.name; // Retorno o nome do enum como fallback
                                               break;
                                           }
                                           return DropdownMenuItem(
@@ -257,7 +238,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                                           );
                                         }).toList(),
                                         onChanged: selectedType == GoalType.workoutSheetCompletion
-                                            ? null // Desabilita o dropdown se for conclusão de ficha
+                                            ? null
                                             : (value) {
                                           modalSetState(() {
                                             selectedUnit = value;
@@ -342,22 +323,29 @@ class _GoalsScreenState extends State<GoalsScreen> {
 
                                 Center(
                                   child: ElevatedButton(
-                                    onPressed: () {
+                                    onPressed: () async {
                                       if (_goalFormKey.currentState!.validate() && selectedType != null && (selectedType == GoalType.workoutSheetCompletion || selectedUnit != null)) {
                                         final newGoal = Goal(
-                                          id: goal?.id, // Mantém o ID se for edição
+                                          id: goal?.id,
                                           name: nameController.text.trim(),
                                           type: selectedType!,
                                           targetValue: double.parse(targetValueController.text.trim()),
-                                          unit: selectedUnit ?? GoalUnit.none, // Garante que a unidade não é nula
-                                          currentValue: goal?.currentValue ?? 0.0, // Mantém o progresso atual na edição
+                                          unit: selectedUnit ?? GoalUnit.none,
+                                          currentValue: goal?.currentValue ?? 0.0,
                                           deadline: selectedDeadline,
                                           createdAt: goal?.createdAt,
                                           isCompleted: goal?.isCompleted ?? false,
                                           completedAt: goal?.completedAt,
                                           notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
                                         );
-                                        Navigator.of(context).pop(newGoal);
+                                        await _goalService.addOrUpdateGoal(newGoal);
+                                        Navigator.of(context).pop();
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(goal == null ? 'Meta criada com sucesso!' : 'Meta salva com sucesso!', style: AppStyles.smallTextStyle),
+                                            backgroundColor: AppColors.successColor.withAlpha((255 * 0.7).round()),
+                                          ),
+                                        );
                                       }
                                     },
                                     style: AppStyles.buttonStyle,
@@ -377,29 +365,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
           },
         );
       },
-    ).then((result) {
-      if (result != null && result is Goal) {
-        setState(() {
-          final int existingIndex = _userGoals.indexWhere((g) => g.id == result.id);
-          if (existingIndex != -1) {
-            _userGoals[existingIndex] = result; // Edita a meta existente
-          } else {
-            _userGoals.add(result); // Adiciona nova meta
-          }
-          _saveUserGoals(); // Salva após adicionar/editar
-          _loadUserGoals(); // Recarrega para ordenar e exibir
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(goal == null ? 'Meta criada com sucesso!' : 'Meta salva com sucesso!', style: AppStyles.smallTextStyle),
-            backgroundColor: AppColors.successColor.withAlpha((255 * 0.7).round()),
-          ),
-        );
-      }
-    });
+    );
   }
 
-  // NOVO: Método para confirmar e excluir uma meta
   void _confirmDeleteGoal(Goal goal) {
     showDialog(
       context: context,
@@ -414,11 +382,8 @@ class _GoalsScreenState extends State<GoalsScreen> {
               child: Text('Cancelar', style: AppStyles.buttonTextStyle.copyWith(color: AppColors.textSecondaryColor)),
             ),
             TextButton(
-              onPressed: () {
-                setState(() {
-                  _userGoals.removeWhere((g) => g.id == goal.id);
-                  _saveUserGoals();
-                });
+              onPressed: () async {
+                await _goalService.deleteGoal(goal.id);
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -435,27 +400,19 @@ class _GoalsScreenState extends State<GoalsScreen> {
     );
   }
 
-  // NOVO: Método para marcar/desmarcar meta como concluída manualmente
-  void _toggleGoalCompletion(Goal goal) {
-    setState(() {
-      final int index = _userGoals.indexWhere((g) => g.id == goal.id);
-      if (index != -1) {
-        final updatedGoal = goal.copyWith(
-          isCompleted: !goal.isCompleted,
-          completedAt: !goal.isCompleted ? DateTime.now() : null, // Define ou limpa a data de conclusão
-          currentValue: !goal.isCompleted ? goal.targetValue : 0.0, // Se concluiu, assume 100%
-        );
-        _userGoals[index] = updatedGoal;
-        _saveUserGoals();
-        _loadUserGoals(); // Recarrega para reordenar
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Meta "${goal.name}" ${updatedGoal.isCompleted ? 'concluída!' : 'reaberta!'}', style: AppStyles.smallTextStyle),
-            backgroundColor: updatedGoal.isCompleted ? AppColors.successColor.withAlpha((255 * 0.7).round()) : AppColors.warningColor.withAlpha((255 * 0.7).round()),
-          ),
-        );
-      }
-    });
+  void _toggleGoalCompletion(Goal goal) async {
+    final updatedGoal = goal.copyWith(
+      isCompleted: !goal.isCompleted,
+      completedAt: !goal.isCompleted ? DateTime.now() : null,
+      currentValue: !goal.isCompleted ? goal.targetValue : 0.0,
+    );
+    await _goalService.addOrUpdateGoal(updatedGoal);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Meta "${goal.name}" ${updatedGoal.isCompleted ? 'concluída!' : 'reaberta!'}', style: AppStyles.smallTextStyle),
+        backgroundColor: updatedGoal.isCompleted ? AppColors.successColor.withAlpha((255 * 0.7).round()) : AppColors.warningColor.withAlpha((255 * 0.7).round()),
+      ),
+    );
   }
 
 
@@ -467,163 +424,186 @@ class _GoalsScreenState extends State<GoalsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: () => _showGoalFormModal(), // Botão para adicionar nova meta
+            onPressed: () => _showGoalFormModal(),
             tooltip: 'Adicionar nova meta',
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _userGoals.isEmpty
-          ? Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'Você ainda não tem metas! Que tal definir uma?',
-                style: AppStyles.bodyStyle.copyWith(color: AppColors.textSecondaryColor),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => _showGoalFormModal(),
-                style: AppStyles.buttonStyle,
-                child: Text('Criar Primeira Meta', style: AppStyles.buttonTextStyle),
-              ),
-            ],
-          ),
-        ),
-      )
-          : ListView.builder(
-        padding: const EdgeInsets.all(16.0),
-        itemCount: _userGoals.length,
-        itemBuilder: (context, index) {
-          final goal = _userGoals[index];
-          double progress = goal.targetValue > 0 ? (goal.currentValue / goal.targetValue).clamp(0.0, 1.0) : 0.0;
-          Color progressColor = goal.isCompleted ? AppColors.successColor : AppColors.accentColor;
-          IconData goalIcon;
-
-          switch (goal.type) {
-            case GoalType.distance:
-              goalIcon = Icons.directions_run;
-              break;
-            case GoalType.duration:
-              goalIcon = Icons.timer;
-              break;
-            case GoalType.weight:
-              goalIcon = Icons.fitness_center;
-              break;
-            case GoalType.frequency:
-              goalIcon = Icons.calendar_today;
-              break;
-            case GoalType.workoutSheetCompletion:
-              goalIcon = Icons.assignment_turned_in;
-              break;
+      body: StreamBuilder<DatabaseEvent>(
+        stream: _goalsStream,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
           }
-
-
-          return Card(
-            margin: const EdgeInsets.only(bottom: 16),
-            color: AppColors.cardColor,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(
-                color: goal.isCompleted ? AppColors.successColor : AppColors.borderColor,
-                width: 1.5,
-              ),
-            ),
-            elevation: goal.isCompleted ? 4 : 2,
-            child: InkWell(
-              onTap: () => _showGoalFormModal(goal: goal), // Editar meta ao tocar
-              borderRadius: BorderRadius.circular(12),
+          if (snapshot.hasError) {
+            return Center(child: Text('Erro ao carregar metas: ${snapshot.error}', style: AppStyles.bodyStyle));
+          }
+          if (!snapshot.hasData || snapshot.data!.snapshot.value == null) {
+            return Center(
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(24.0),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Row(
-                      children: [
-                        Icon(goalIcon, color: progressColor, size: 30),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            goal.name,
-                            style: AppStyles.headingStyle.copyWith(fontSize: 18),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        // Ícone de conclusão ou ação para marcar
-                        if (goal.isCompleted)
-                          Icon(Icons.check_circle, color: AppColors.successColor, size: 24)
-                        else
-                          IconButton(
-                            icon: Icon(Icons.check_circle_outline, color: AppColors.textSecondaryColor),
-                            onPressed: () => _toggleGoalCompletion(goal),
-                            tooltip: 'Marcar como Concluída',
-                          ),
-                        IconButton(
-                          icon: Icon(Icons.delete_outline, color: AppColors.errorColor),
-                          onPressed: () => _confirmDeleteGoal(goal),
-                          tooltip: 'Excluir Meta',
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
                     Text(
-                      'Meta: ${goal.targetValue.toStringAsFixed(goal.type == GoalType.distance || goal.type == GoalType.weight ? 1 : 0)} ${goal.unit.name}',
+                      'Você ainda não tem metas! Que tal definir uma?',
                       style: AppStyles.bodyStyle.copyWith(color: AppColors.textSecondaryColor),
+                      textAlign: TextAlign.center,
                     ),
-                    if (goal.notes != null && goal.notes!.isNotEmpty)
-                      Text(
-                        'Notas: ${goal.notes}',
-                        style: AppStyles.smallTextStyle.copyWith(fontStyle: FontStyle.italic),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    const SizedBox(height: 12),
-                    if (goal.type != GoalType.workoutSheetCompletion) // Não exibe progresso para conclusão de ficha
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Progresso: ${goal.currentValue.toStringAsFixed(goal.type == GoalType.distance || goal.type == GoalType.weight ? 1 : 0)} / ${goal.targetValue.toStringAsFixed(goal.type == GoalType.distance || goal.type == GoalType.weight ? 1 : 0)} ${goal.unit.name} (${(progress * 100).toStringAsFixed(0)}%)',
-                            style: AppStyles.smallTextStyle.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 8),
-                          LinearProgressIndicator(
-                            value: progress,
-                            backgroundColor: AppColors.borderColor,
-                            color: progressColor,
-                            minHeight: 8,
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                        ],
-                      ),
-                    if (goal.deadline != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Prazo: ${DateFormat('dd/MM/yyyy').format(goal.deadline!)}',
-                        style: AppStyles.smallTextStyle.copyWith(
-                          color: goal.isCompleted
-                              ? AppColors.textSecondaryColor
-                              : (goal.deadline!.isBefore(DateTime.now()) ? AppColors.errorColor : AppColors.textSecondaryColor),
-                        ),
-                      ),
-                    ],
-                    if (goal.isCompleted && goal.completedAt != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Concluída em: ${DateFormat('dd/MM/yyyy').format(goal.completedAt!)}',
-                        style: AppStyles.smallTextStyle.copyWith(color: AppColors.successColor, fontWeight: FontWeight.bold),
-                      ),
-                    ],
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () => _showGoalFormModal(),
+                      style: AppStyles.buttonStyle,
+                      child: Text('Criar Primeira Meta', style: AppStyles.buttonTextStyle),
+                    ),
                   ],
                 ),
               ),
-            ),
+            );
+          }
+
+          final dynamic goalsData = snapshot.data!.snapshot.value;
+          List<Goal> currentGoals = [];
+          if (goalsData is Map) {
+            goalsData.forEach((key, value) {
+              currentGoals.add(Goal.fromJson(Map<String, dynamic>.from(value)));
+            });
+          }
+          currentGoals.sort((a, b) {
+            if (a.isCompleted && !b.isCompleted) return 1;
+            if (!a.isCompleted && b.isCompleted) return -1;
+            return b.createdAt.compareTo(a.createdAt);
+          });
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(16.0),
+            itemCount: currentGoals.length,
+            itemBuilder: (context, index) {
+              final goal = currentGoals[index];
+              double progress = goal.targetValue > 0 ? (goal.currentValue / goal.targetValue).clamp(0.0, 1.0) : 0.0;
+              Color progressColor = goal.isCompleted ? AppColors.successColor : AppColors.accentColor;
+              IconData goalIcon;
+
+              switch (goal.type) {
+                case GoalType.distance:
+                  goalIcon = Icons.directions_run;
+                  break;
+                case GoalType.duration:
+                  goalIcon = Icons.timer;
+                  break;
+                case GoalType.weight:
+                  goalIcon = Icons.fitness_center;
+                  break;
+                case GoalType.frequency:
+                  goalIcon = Icons.calendar_today;
+                  break;
+                case GoalType.workoutSheetCompletion:
+                  goalIcon = Icons.assignment_turned_in;
+                  break;
+              }
+
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 16),
+                color: AppColors.cardColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(
+                    color: goal.isCompleted ? AppColors.successColor : AppColors.borderColor,
+                    width: 1.5,
+                  ),
+                ),
+                elevation: goal.isCompleted ? 4 : 2,
+                child: InkWell(
+                  onTap: () => _showGoalFormModal(goal: goal),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(goalIcon, color: progressColor, size: 30),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                goal.name,
+                                style: AppStyles.headingStyle.copyWith(fontSize: 18),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (goal.isCompleted)
+                              Icon(Icons.check_circle, color: AppColors.successColor, size: 24)
+                            else
+                              IconButton(
+                                icon: Icon(Icons.check_circle_outline, color: AppColors.textSecondaryColor),
+                                onPressed: () => _toggleGoalCompletion(goal),
+                                tooltip: 'Marcar como Concluída',
+                              ),
+                            IconButton(
+                              icon: Icon(Icons.delete_outline, color: AppColors.errorColor),
+                              onPressed: () => _confirmDeleteGoal(goal),
+                              tooltip: 'Excluir Meta',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Meta: ${goal.targetValue.toStringAsFixed(goal.type == GoalType.distance || goal.type == GoalType.weight ? 1 : 0)} ${goal.unit.name}',
+                          style: AppStyles.bodyStyle.copyWith(color: AppColors.textSecondaryColor),
+                        ),
+                        if (goal.notes != null && goal.notes!.isNotEmpty)
+                          Text(
+                            'Notas: ${goal.notes}',
+                            style: AppStyles.smallTextStyle.copyWith(fontStyle: FontStyle.italic),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        const SizedBox(height: 12),
+                        if (goal.type != GoalType.workoutSheetCompletion)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Progresso: ${goal.currentValue.toStringAsFixed(goal.type == GoalType.distance || goal.type == GoalType.weight ? 1 : 0)} / ${goal.targetValue.toStringAsFixed(goal.type == GoalType.distance || goal.type == GoalType.weight ? 1 : 0)} ${goal.unit.name} (${(progress * 100).toStringAsFixed(0)}%)',
+                                style: AppStyles.smallTextStyle.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 8),
+                              LinearProgressIndicator(
+                                value: progress,
+                                backgroundColor: AppColors.borderColor,
+                                color: progressColor,
+                                minHeight: 8,
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                            ],
+                          ),
+                        if (goal.deadline != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Prazo: ${DateFormat('dd/MM/yyyy').format(goal.deadline!)}',
+                            style: AppStyles.smallTextStyle.copyWith(
+                              color: goal.isCompleted
+                                  ? AppColors.textSecondaryColor
+                                  : (goal.deadline!.isBefore(DateTime.now()) ? AppColors.errorColor : AppColors.textSecondaryColor),
+                            ),
+                          ),
+                        ],
+                        if (goal.isCompleted && goal.completedAt != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Concluída em: ${DateFormat('dd/MM/yyyy').format(goal.completedAt!)}',
+                            style: AppStyles.smallTextStyle.copyWith(color: AppColors.successColor, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
           );
         },
       ),

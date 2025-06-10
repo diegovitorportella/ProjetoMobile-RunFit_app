@@ -19,8 +19,7 @@ import 'package:runfit_app/screens/achievements_screen.dart';
 import 'package:runfit_app/screens/activity_selection_screen.dart';
 import 'package:runfit_app/services/goal_service.dart';
 import 'package:runfit_app/data/models/goal.dart';
-// Importação do Firebase Realtime Database
-import 'package:firebase_database/firebase_database.dart'; // <--- ADICIONE ESTA LINHA
+import 'package:firebase_database/firebase_database.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -44,8 +43,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final AchievementService _achievementService = AchievementService();
   final GoalService _goalService = GoalService();
 
-  // Referência ao banco de dados Realtime Database
-  final DatabaseReference _activitiesRef = FirebaseDatabase.instance.ref('activities'); // <--- ADICIONE ESTA LINHA
+  final DatabaseReference _activitiesRef = FirebaseDatabase.instance.ref('activities');
+  final DatabaseReference _userProfileRef = FirebaseDatabase.instance.ref('users/${FirebaseConstants.userId}/profile');
 
 
   @override
@@ -58,31 +57,60 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadUserPreferences() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _userName = prefs.getString(SharedPreferencesKeys.userName) ?? 'Usuário';
-      _userModality = prefs.getString(SharedPreferencesKeys.userModality) ?? 'N/A';
-      _userLevel = prefs.getString(SharedPreferencesKeys.userLevel) ?? 'N/A';
-      String? freq = prefs.getString(SharedPreferencesKeys.userFrequency);
-      if (freq != null) {
-        if (freq == WorkoutFrequency.duasVezesPorSemana.name) {
-          _userFrequency = '2x por semana';
-        } else if (freq == WorkoutFrequency.tresVezesPorSemana.name) {
-          _userFrequency = '3x por semana';
-        } else if (freq == WorkoutFrequency.cincoVezesPorSemana.name) {
-          _userFrequency = '5x por semana';
-        } else {
-          _userFrequency = 'N/A';
-        }
-      } else {
-        _userFrequency = 'N/A';
-      }
 
+    // Carregar dados do perfil do Firebase Realtime Database
+    try {
+      final snapshot = await _userProfileRef.once();
+      final dynamic userData = snapshot.snapshot.value;
+
+      if (userData != null && userData is Map) {
+        final Map<String, dynamic> profileData = Map<String, dynamic>.from(userData);
+
+        setState(() {
+          _userName = profileData['name'] ?? 'Usuário';
+          _userModality = profileData['modality'] ?? 'N/A';
+          _userLevel = profileData['level'] ?? 'N/A';
+          String? freq = profileData['frequency'];
+          if (freq != null) {
+            if (freq == WorkoutFrequency.duasVezesPorSemana.name) {
+              _userFrequency = '2x por semana';
+            } else if (freq == WorkoutFrequency.tresVezesPorSemana.name) {
+              _userFrequency = '3x por semana';
+            } else if (freq == WorkoutFrequency.cincoVezesPorSemana.name) {
+              _userFrequency = '5x por semana';
+            } else {
+              _userFrequency = 'N/A';
+            }
+          } else {
+            _userFrequency = 'N/A';
+          }
+        });
+      } else {
+        setState(() {
+          _userName = 'Usuário';
+          _userModality = 'N/A';
+          _userLevel = 'N/A';
+          _userFrequency = 'N/A';
+        });
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('Erro ao carregar dados do perfil do Firebase na HomeScreen: $e');
+      setState(() {
+        _userName = 'Usuário';
+        _userModality = 'N/A';
+        _userLevel = 'N/A';
+        _userFrequency = 'N/A';
+      });
+    }
+
+    setState(() {
       _completedWorkoutsThisWeek = prefs.getInt(SharedPreferencesKeys.completedWorkoutsThisWeek) ?? 0;
-      if (freq == WorkoutFrequency.duasVezesPorSemana.name) {
+      if (_userFrequency == '2x por semana') {
         _targetWorkoutsThisWeek = 2;
-      } else if (freq == WorkoutFrequency.tresVezesPorSemana.name) {
+      } else if (_userFrequency == '3x por semana') {
         _targetWorkoutsThisWeek = 3;
-      } else if (freq == WorkoutFrequency.cincoVezesPorSemana.name) {
+      } else if (_userFrequency == '5x por semana') {
         _targetWorkoutsThisWeek = 5;
       } else {
         _targetWorkoutsThisWeek = 0;
@@ -163,18 +191,15 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Função para salvar uma atividade no Firebase Realtime Database
-  Future<void> _saveActivityToFirebase(ActivityHistoryEntry newEntry) async { // <--- ADICIONE ESTA FUNÇÃO
+  Future<void> _saveActivityToFirebase(ActivityHistoryEntry newEntry) async {
     try {
-      final newActivityKey = _activitiesRef.push().key; // Gera um ID único
+      final newActivityKey = _activitiesRef.push().key;
 
       if (newActivityKey != null) {
         await _activitiesRef.child(newActivityKey).set(newEntry.toJson());
-        // print('Ficha de treino salva no Firebase com a chave: $newActivityKey'); // Opcional para depuração
       }
     } catch (e) {
       print('Erro ao salvar ficha de treino no Firebase: $e');
-      // Considere adicionar feedback ao usuário aqui
     }
   }
 
@@ -208,21 +233,15 @@ class _HomeScreenState extends State<HomeScreen> {
         durationMinutes: null,
         distanceKm: null,
         notes: 'Ficha de treino concluída: ${_activeWorkoutSheet!.name}',
-        // Para fichas de treino, pathCoordinates e averagePace não se aplicam diretamente
         pathCoordinates: null,
         averagePace: null,
-        // Se a ficha de treino incluir exercícios detalhados (que você deseja salvar no histórico)
-        // você precisaria mapear os exercícios do WorkoutSheet para LoggedExercise aqui.
-        // Por agora, vamos assumir que WorkoutSheetData (JSON completo) já é suficiente.
-        loggedExercises: null, // Ou mapeie se necessário para o histórico
+        loggedExercises: null,
       );
 
-      // Salva no SharedPreferences
       historyJsonList.add(jsonEncode(newEntry.toJson()));
       await prefs.setStringList(SharedPreferencesKeys.activityHistory, historyJsonList);
 
-      // Salva no Firebase Realtime Database
-      await _saveActivityToFirebase(newEntry); // <--- CHAMADA AQUI!
+      await _saveActivityToFirebase(newEntry);
 
 
       final currentCompleted = prefs.getInt(SharedPreferencesKeys.completedWorkoutsThisWeek) ?? 0;
@@ -236,7 +255,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _showAchievementUnlockedDialog(unlockedAch);
       }
 
-      // NOVO: Atualizar metas ao concluir uma ficha de treino
       final newlyCompletedGoals = await _goalService.updateGoalsProgress(
         modality: _activeWorkoutSheet!.modality.name,
         completedWorkoutSheetId: _activeWorkoutSheet!.id,
@@ -355,6 +373,63 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  // --- Funções auxiliares para os ícones e layout da seção de preferências ---
+  IconData _getModalityIcon(String? modality) {
+    switch (modality?.toLowerCase()) {
+      case 'corrida':
+        return Icons.directions_run;
+      case 'musculacao':
+        return Icons.fitness_center;
+      case 'ambos':
+        return Icons.sports_gymnastics;
+      default:
+        return Icons.help_outline;
+    }
+  }
+
+  IconData _getLevelIcon(String? level) {
+    switch (level?.toLowerCase()) {
+      case 'iniciante':
+        return Icons.star_outline;
+      case 'intermediario':
+        return Icons.star;
+      case 'avancado':
+        return Icons.star_half;
+      default:
+        return Icons.help_outline;
+    }
+  }
+
+  Widget _buildPreferenceRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, color: AppColors.textSecondaryColor, size: 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: AppStyles.bodyStyle.copyWith(
+              color: AppColors.textSecondaryColor,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: AppStyles.bodyStyle.copyWith(
+            color: color,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+  // --- Fim das funções auxiliares ---
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -389,7 +464,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 context,
                 MaterialPageRoute(builder: (context) => const ProfileScreen()),
               ).then((_) {
-                _loadUserPreferences();
+                _loadUserPreferences(); // Recarrega as preferências após voltar do perfil
               });
             },
             tooltip: 'Perfil',
@@ -424,19 +499,65 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Suas Preferências:', style: AppStyles.headingStyle),
+                      const SizedBox(height: 16), // Increased spacing
+
+                      _buildPreferenceRow( // New helper method
+                        icon: _getModalityIcon(_userModality), // Dynamic icon
+                        label: 'Modalidade Preferida:',
+                        value: _userModality?.toCapitalized() ?? 'Não definida',
+                        color: AppColors.textPrimaryColor,
+                      ),
                       const SizedBox(height: 8),
-                      Text('Modalidade Preferida: ${_userModality?.toCapitalized() ?? 'Não definida'}', style: AppStyles.bodyStyle),
-                      Text('Nível: ${_userLevel?.toCapitalized() ?? 'Não definido'}', style: AppStyles.bodyStyle),
-                      Text('Frequência Semanal: ${_userFrequency?.toCapitalized() ?? 'Não definida'}', style: AppStyles.bodyStyle),
-                      const SizedBox(height: 16),
+
+                      _buildPreferenceRow( // New helper method
+                        icon: _getLevelIcon(_userLevel), // Dynamic icon
+                        label: 'Nível:',
+                        value: _userLevel?.toCapitalized() ?? 'Não definido',
+                        color: AppColors.textPrimaryColor,
+                      ),
+                      const SizedBox(height: 8),
+
+                      _buildPreferenceRow( // New helper method
+                        icon: Icons.calendar_today,
+                        label: 'Frequência Semanal:',
+                        value: _userFrequency?.toCapitalized() ?? 'Não definida',
+                        color: AppColors.textPrimaryColor,
+                      ),
+                      const SizedBox(height: 16), // Spacing before progress
+
                       Text(
-                        'Treinos Concluídos esta semana: $_completedWorkoutsThisWeek / $_targetWorkoutsThisWeek',
+                        'Treinos Concluídos esta semana:',
                         style: AppStyles.bodyStyle.copyWith(
-                          color: _completedWorkoutsThisWeek >= _targetWorkoutsThisWeek && _targetWorkoutsThisWeek > 0
-                              ? AppColors.successColor
-                              : AppColors.accentColor,
                           fontWeight: FontWeight.bold,
                         ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: LinearProgressIndicator(
+                              value: _targetWorkoutsThisWeek > 0
+                                  ? _completedWorkoutsThisWeek / _targetWorkoutsThisWeek
+                                  : 0.0,
+                              backgroundColor: AppColors.borderColor,
+                              color: _completedWorkoutsThisWeek >= _targetWorkoutsThisWeek && _targetWorkoutsThisWeek > 0
+                                  ? AppColors.successColor // Green if goal met
+                                  : AppColors.accentColor, // Red otherwise
+                              minHeight: 10,
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            '$_completedWorkoutsThisWeek / $_targetWorkoutsThisWeek',
+                            style: AppStyles.bodyStyle.copyWith(
+                              color: _completedWorkoutsThisWeek >= _targetWorkoutsThisWeek && _targetWorkoutsThisWeek > 0
+                                  ? AppColors.successColor
+                                  : AppColors.accentColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

@@ -32,17 +32,23 @@ enum UserGender {
   naoInformar,
 }
 
-// Chaves para SharedPreferences
+// ID de Usuário Fixo para o Firebase
+class FirebaseConstants {
+  static const String userId = 'default_user';
+}
+
+
+// Chaves para SharedPreferences (Mantenha todas estas chaves ativas por enquanto)
 class SharedPreferencesKeys {
   static const String isOnboardingCompleted = 'isOnboardingCompleted';
-  static const String userName = 'userName';
-  static const String userGender = 'userGender';
-  static const String userAge = 'userAge';
-  static const String userHeight = 'userHeight';
-  static const String userWeight = 'userWeight';
-  static const String userModality = 'userModality';
-  static const String userLevel = 'userLevel';
-  static const String userFrequency = 'userFrequency';
+  static const String userName = 'userName'; // <--- RESTAURADO
+  static const String userGender = 'userGender'; // <--- RESTAURADO
+  static const String userAge = 'userAge'; // <--- RESTAURADO
+  static const String userHeight = 'userHeight'; // <--- RESTAURADO
+  static const String userWeight = 'userWeight'; // <--- RESTAURADO
+  static const String userModality = 'userModality'; // <--- RESTAURADO
+  static const String userLevel = 'userLevel'; // <--- RESTAURADO
+  static const String userFrequency = 'userFrequency'; // <--- RESTAURADO
   static const String activeWorkoutSheetId = 'activeWorkoutSheetId';
   static const String targetWorkoutsThisWeek = 'targetWorkoutsThisWeek';
   static const String completedWorkoutsThisWeek = 'completedWorkoutsThisWeek';
@@ -52,11 +58,11 @@ class SharedPreferencesKeys {
   static const String lastWeeklyResetDate = 'lastWeeklyResetDate';
   static const String activityHistory = 'activityHistory';
 
-  // NOVAS CHAVES PARA CONQUISTAS E CONTADORES
-  static const String achievementsList = 'achievementsList'; // Chave para a lista completa de conquistas
-  static const String totalWorkoutsCompleted = 'totalWorkoutsCompleted'; // Contador de todos os treinos
-  static const String weightliftingWorkoutsCompleted = 'weightliftingWorkoutsCompleted'; // Contador de treinos de musculação
-  static const String runningWorkoutsCompleted = 'runningWorkoutsCompleted'; // Contador de treinos de corrida
-  static const String profileImagePath = 'profileImagePath'; // NOVO: Chave para o caminho da imagem de perfil
-  static const String userGoalsList = 'userGoalsList'; // NOVO: Chave para a lista de metas do usuário
+  // NOVAS CHAVES PARA CONQUISTAS E CONTADORES (Mantenha ativas por enquanto)
+  static const String achievementsList = 'achievementsList'; // <--- RESTAURADO
+  static const String totalWorkoutsCompleted = 'totalWorkoutsCompleted'; // <--- RESTAURADO
+  static const String weightliftingWorkoutsCompleted = 'weightliftingWorkoutsCompleted'; // <--- RESTAURADO
+  static const String runningWorkoutsCompleted = 'runningWorkoutsCompleted'; // <--- RESTAURADO
+  static const String profileImagePath = 'profileImagePath'; // <--- RESTAURADO
+  static const String userGoalsList = 'userGoalsList'; // <--- RESTAURADO
 }

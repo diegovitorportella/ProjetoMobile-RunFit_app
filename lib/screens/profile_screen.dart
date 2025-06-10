@@ -5,13 +5,16 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:runfit_app/utils/app_colors.dart';
 import 'package:runfit_app/utils/app_styles.dart';
-import 'package:runfit_app/utils/app_constants.dart';
+import 'package:runfit_app/utils/app_constants.dart'; // Para FirebaseConstants e enums
 import 'package:runfit_app/screens/achievements_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:runfit_app/screens/about_app_screen.dart';
-import 'package:runfit_app/screens/goals_screen.dart'; // NOVO: Importar a GoalsScreen
+import 'package:runfit_app/screens/goals_screen.dart';
+// Importação do Firebase Realtime Database
+import 'package:firebase_database/firebase_database.dart'; // <--- ADICIONE ESTA LINHA
+
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -31,14 +34,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _userModality;
   String? _userLevel;
   String? _userFrequency;
-  String? _profileImagePath;
+  String? _profileImagePath; // Este ainda será salvo no SharedPreferences
 
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _picker = ImagePicker();
 
+  // Referência ao banco de dados para o perfil do usuário
+  late DatabaseReference _userProfileRef; // <--- ADICIONE ESTA LINHA
+
+
   @override
   void initState() {
     super.initState();
+    // Inicializa a referência do Firebase com o userId fixo
+    _userProfileRef = FirebaseDatabase.instance.ref('users/${FirebaseConstants.userId}/profile'); // <--- ADICIONE ESTA LINHA
     _loadUserPreferences();
   }
 
@@ -51,47 +60,112 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
+  // Modificado para carregar preferências do Firebase e SharedPreferences (para imagem)
   Future<void> _loadUserPreferences() async {
     final prefs = await SharedPreferences.getInstance();
+
+    // Carregar imagem de perfil do SharedPreferences (mantido aqui)
     setState(() {
-      _nameController.text = prefs.getString(SharedPreferencesKeys.userName) ?? '';
-      _userGender = prefs.getString(SharedPreferencesKeys.userGender);
-      _ageController.text = (prefs.getInt(SharedPreferencesKeys.userAge) ?? '').toString();
-      _heightController.text = (prefs.getDouble(SharedPreferencesKeys.userHeight) ?? '').toString();
-      _weightController.text = (prefs.getDouble(SharedPreferencesKeys.userWeight) ?? '').toString();
-      _userModality = prefs.getString(SharedPreferencesKeys.userModality);
-      _userLevel = prefs.getString(SharedPreferencesKeys.userLevel);
-      _userFrequency = prefs.getString(SharedPreferencesKeys.userFrequency);
       _profileImagePath = prefs.getString(SharedPreferencesKeys.profileImagePath);
     });
+
+    // Carregar dados do perfil do Firebase Realtime Database
+    try {
+      final snapshot = await _userProfileRef.once(); // Obtém os dados uma única vez
+      final dynamic userData = snapshot.snapshot.value;
+
+      if (userData != null && userData is Map) {
+        // Converte para Map<String, dynamic> para segurança de tipo
+        final Map<String, dynamic> profileData = Map<String, dynamic>.from(userData);
+
+        setState(() {
+          _nameController.text = profileData['name'] ?? '';
+          _userGender = profileData['gender'];
+          _ageController.text = (profileData['age'] ?? '').toString();
+          _heightController.text = (profileData['height'] ?? '').toString();
+          _weightController.text = (profileData['weight'] ?? '').toString();
+          _userModality = profileData['modality'];
+          _userLevel = profileData['level'];
+          _userFrequency = profileData['frequency'];
+        });
+        // print('Dados do perfil carregados do Firebase!'); // Opcional para depuração
+      } else {
+        // print('Nenhum dado de perfil encontrado no Firebase.'); // Opcional
+        // Se não houver dados no Firebase, tente carregar do SharedPreferences (compatibilidade inicial)
+        // Isso é um fallback para migrar usuários antigos ou preencher se o onboarding não salvou tudo
+        setState(() {
+          _nameController.text = prefs.getString(SharedPreferencesKeys.userName) ?? '';
+          _userGender = prefs.getString(SharedPreferencesKeys.userGender);
+          _ageController.text = (prefs.getInt(SharedPreferencesKeys.userAge) ?? '').toString();
+          _heightController.text = (prefs.getDouble(SharedPreferencesKeys.userHeight) ?? '').toString();
+          _weightController.text = (prefs.getDouble(SharedPreferencesKeys.userWeight) ?? '').toString();
+          _userModality = prefs.getString(SharedPreferencesKeys.userModality);
+          _userLevel = prefs.getString(SharedPreferencesKeys.userLevel);
+          _userFrequency = prefs.getString(SharedPreferencesKeys.userFrequency);
+        });
+        // Após carregar do SharedPreferences (se existirem), salve no Firebase para migrar
+        if (_nameController.text.isNotEmpty) {
+          await _saveUserPreferencesToFirebase(); // Salva no Firebase para persistência futura
+        }
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('Erro ao carregar dados do perfil do Firebase: $e');
+      // Em caso de erro no Firebase, tente carregar do SharedPreferences como fallback
+      setState(() {
+        _nameController.text = prefs.getString(SharedPreferencesKeys.userName) ?? '';
+        _userGender = prefs.getString(SharedPreferencesKeys.userGender);
+        _ageController.text = (prefs.getInt(SharedPreferencesKeys.userAge) ?? '').toString();
+        _heightController.text = (prefs.getDouble(SharedPreferencesKeys.userHeight) ?? '').toString();
+        _weightController.text = (prefs.getDouble(SharedPreferencesKeys.userWeight) ?? '').toString();
+        _userModality = prefs.getString(SharedPreferencesKeys.userModality);
+        _userLevel = prefs.getString(SharedPreferencesKeys.userLevel);
+        _userFrequency = prefs.getString(SharedPreferencesKeys.userFrequency);
+      });
+    }
   }
 
+  // Nova função para salvar apenas no Firebase
+  Future<void> _saveUserPreferencesToFirebase() async {
+    try {
+      await _userProfileRef.set({
+        'name': _nameController.text,
+        'gender': _userGender,
+        'age': int.tryParse(_ageController.text),
+        'height': double.tryParse(_heightController.text),
+        'weight': double.tryParse(_weightController.text),
+        'modality': _userModality,
+        'level': _userLevel,
+        'frequency': _userFrequency,
+        // profileImagePath não vai aqui, pois ele é local no SharedPreferences
+      });
+      // print('Dados do perfil salvos no Firebase com sucesso!');
+    } catch (e) {
+      // ignore: avoid_print
+      print('Erro ao salvar dados do perfil no Firebase: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao salvar seu perfil no Firebase.', style: AppStyles.smallTextStyle),
+            backgroundColor: AppColors.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
+  // Função principal para salvar preferências (agora primariamente no Firebase)
   Future<void> _saveUserPreferences() async {
     if (_formKey.currentState!.validate()) {
       final prefs = await SharedPreferences.getInstance();
 
-      await prefs.setString(SharedPreferencesKeys.userName, _nameController.text);
-      if (_userGender != null) {
-        await prefs.setString(SharedPreferencesKeys.userGender, _userGender!);
+      // Salva a imagem de perfil no SharedPreferences (mantido aqui)
+      if (_profileImagePath != null) {
+        await prefs.setString(SharedPreferencesKeys.profileImagePath, _profileImagePath!);
       }
-      if (_ageController.text.isNotEmpty) {
-        await prefs.setInt(SharedPreferencesKeys.userAge, int.parse(_ageController.text));
-      }
-      if (_heightController.text.isNotEmpty) {
-        await prefs.setDouble(SharedPreferencesKeys.userHeight, double.parse(_heightController.text));
-      }
-      if (_weightController.text.isNotEmpty) {
-        await prefs.setDouble(SharedPreferencesKeys.userWeight, double.parse(_weightController.text));
-      }
-      if (_userModality != null) {
-        await prefs.setString(SharedPreferencesKeys.userModality, _userModality!);
-      }
-      if (_userLevel != null) {
-        await prefs.setString(SharedPreferencesKeys.userLevel, _userLevel!);
-      }
-      if (_userFrequency != null) {
-        await prefs.setString(SharedPreferencesKeys.userFrequency, _userFrequency!);
-      }
+
+      // Salva o resto das preferências no Firebase
+      await _saveUserPreferencesToFirebase();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -100,7 +174,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             backgroundColor: AppColors.successColor,
           ),
         );
-        _loadUserPreferences();
+        // Não é mais necessário recarregar _loadUserPreferences() aqui, pois o Firebase é a fonte
+        // e se for necessário um refresh, o StreamBuilder ou uma abordagem de estado mais sofisticada lidaria.
       }
     }
   }
@@ -150,7 +225,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         pathOrUrl = pickedFile.path;
       }
 
-      await prefs.setString(SharedPreferencesKeys.profileImagePath, pathOrUrl!);
+      await prefs.setString(SharedPreferencesKeys.profileImagePath, pathOrUrl!); // Ainda salva no SharedPreferences
       setState(() {
         _profileImagePath = pathOrUrl;
       });
@@ -292,7 +367,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   if (value == null || value.isEmpty) {
                     return 'Digite sua idade';
                   }
-                  if (int.tryParse(value) == null || int.parse(value) <= 0) {
+                  if (int.tryParse(value) == null || int.parse(value)! <= 0) {
                     return 'Idade inválida';
                   }
                   return null;
@@ -313,7 +388,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   if (value == null || value.isEmpty) {
                     return 'Digite sua altura';
                   }
-                  if (double.tryParse(value) == null || double.parse(value) <= 0) {
+                  if (double.tryParse(value) == null || double.parse(value)! <= 0) {
                     return 'Altura inválida';
                   }
                   return null;
@@ -334,7 +409,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   if (value == null || value.isEmpty) {
                     return 'Digite seu peso';
                   }
-                  if (double.tryParse(value) == null || double.parse(value) <= 0) {
+                  if (double.tryParse(value) == null || double.parse(value)! <= 0) {
                     return 'Peso inválido';
                   }
                   return null;
@@ -443,7 +518,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               Divider(color: AppColors.borderColor, height: 1),
 
-              // NOVO: ListTile para Metas
               ListTile(
                 leading: Icon(Icons.track_changes, color: AppColors.textPrimaryColor),
                 title: Text('Minhas Metas', style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold)),
@@ -451,7 +525,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const GoalsScreen()), // Navega para GoalsScreen
+                    MaterialPageRoute(builder: (context) => const GoalsScreen()),
                   );
                 },
               ),

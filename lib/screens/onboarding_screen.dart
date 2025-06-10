@@ -5,8 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:runfit_app/utils/app_colors.dart';
 import 'package:runfit_app/utils/app_styles.dart';
-import 'package:runfit_app/utils/app_constants.dart';
+import 'package:runfit_app/utils/app_constants.dart'; // Para FirebaseConstants, SharedPreferencesKeys e enums
 import 'package:runfit_app/screens/main_screen.dart';
+// Importação do Firebase Realtime Database
+import 'package:firebase_database/firebase_database.dart'; // <--- ADICIONE ESTA LINHA
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -19,13 +21,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
-  // Controladores do formulário de perfil (mantidos aqui por simplicidade no onboarding)
   final TextEditingController _nameController = TextEditingController();
   String? _selectedGender;
   final TextEditingController _ageController = TextEditingController();
   final TextEditingController _heightController = TextEditingController();
   final TextEditingController _weightController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+
+  // Referência ao banco de dados para o perfil do usuário
+  late DatabaseReference _userProfileRef; // <--- ADICIONE ESTA LINHA
+
+  @override
+  void initState() {
+    super.initState();
+    // Inicializa a referência do Firebase com o userId fixo
+    _userProfileRef = FirebaseDatabase.instance.ref('users/${FirebaseConstants.userId}/profile'); // <--- ADICIONE ESTA LINHA
+  }
 
   @override
   void dispose() {
@@ -41,12 +52,36 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (_formKey.currentState!.validate()) {
       final prefs = await SharedPreferences.getInstance();
 
+      // Marca o onboarding como concluído no SharedPreferences (ainda é útil aqui)
       await prefs.setBool(SharedPreferencesKeys.isOnboardingCompleted, true);
-      await prefs.setString(SharedPreferencesKeys.userName, _nameController.text);
-      await prefs.setString(SharedPreferencesKeys.userGender, _selectedGender!);
-      await prefs.setInt(SharedPreferencesKeys.userAge, int.parse(_ageController.text));
-      await prefs.setDouble(SharedPreferencesKeys.userHeight, double.parse(_heightController.text));
-      await prefs.setDouble(SharedPreferencesKeys.userWeight, double.parse(_weightController.text));
+
+      // Salva os dados do perfil no Firebase Realtime Database
+      try {
+        await _userProfileRef.set({ // <--- MUDANÇA PRINCIPAL AQUI
+          'name': _nameController.text,
+          'gender': _selectedGender!,
+          'age': int.parse(_ageController.text),
+          'height': double.parse(_heightController.text),
+          'weight': double.parse(_weightController.text),
+          // Adicione aqui outros campos de perfil que possam ser configurados inicialmente
+          // Como modalidade, nível, frequência, se você quiser que o onboarding cubra isso.
+          // Por enquanto, apenas os campos básicos de perfil.
+        });
+        // print('Dados do perfil salvos no Firebase!'); // Opcional para depuração
+      } catch (e) {
+        // ignore: avoid_print
+        print('Erro ao salvar dados do perfil no Firebase: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar( // Feedback de erro
+            SnackBar(
+              content: Text('Erro ao salvar seu perfil. Tente novamente.', style: AppStyles.smallTextStyle),
+              backgroundColor: AppColors.errorColor,
+            ),
+          );
+        }
+        return; // Não avança se houver erro ao salvar
+      }
+
 
       if (mounted) {
         Navigator.of(context).pushReplacement(
@@ -59,20 +94,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     List<Widget> onboardingPages = [
+      // ... (suas páginas de onboarding existentes)
       // Primeira página: Logo + Bem-vindo
       Stack(
         children: [
-          _buildOnboardingBasePage( // Imagem de fundo
+          _buildOnboardingBasePage(
             imagePath: 'assets/images/tela_inicio.png',
             blendMode: BlendMode.darken,
             blendColor: Colors.black.withOpacity(0.5),
-            title: null, // Não exibir título e descrição da base aqui, pois são sobrepostos
+            title: null,
             description: null,
           ),
           Center(
             child: Image.asset(
-              'assets/images/logo_hibridus.png', // Caminho para o arquivo da sua logo
-              height: 150, // Ajuste a altura conforme necessário
+              'assets/images/logo_hibridus.png',
+              height: 150,
             ),
           ),
           Align(
@@ -94,7 +130,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     style: AppStyles.bodyStyle.copyWith(color: AppColors.textSecondaryColor, fontSize: 18),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 100), // Espaço para os botões e dots
+                  const SizedBox(height: 100),
                 ],
               ),
             ),
@@ -103,25 +139,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
       // Páginas de introdução de recursos
       _buildOnboardingBasePage(
-        imagePath: 'assets/images/tela_corrida.png', // Imagem de fundo
+        imagePath: 'assets/images/tela_corrida.png',
         title: 'Rastreie Suas Corridas',
         description: 'Acompanhe distância, tempo, ritmo e visualize seu percurso no mapa em tempo real.',
         blendMode: BlendMode.darken,
         blendColor: Colors.black.withOpacity(0.6),
       ),
       _buildOnboardingBasePage(
-        imagePath: 'assets/images/tela_musculaçao.png', // Imagem de fundo
+        imagePath: 'assets/images/tela_musculaçao.png',
         title: 'Gerencie Seus Treinos',
         description: 'Crie suas próprias fichas de treino ou use as prontas e registre cada exercício detalhadamente.',
         blendMode: BlendMode.darken,
         blendColor: Colors.black.withOpacity(0.6),
       ),
       _buildOnboardingBasePage(
-        imagePath: 'assets/images/metas.png', // NOVA IMAGEM DE FUNDO
+        imagePath: 'assets/images/metas.png',
         title: 'Alcance Suas Metas e Conquistas',
         description: 'Defina objetivos personalizados, ganhe conquistas e mantenha-se motivado em sua jornada fitness.',
         blendMode: BlendMode.darken,
-        blendColor: Colors.black.withOpacity(0.7), // Pode ajustar a opacidade se a imagem precisar
+        blendColor: Colors.black.withOpacity(0.7),
       ),
       // Última página: Formulário de Perfil
       _buildProfileFormPage(),
@@ -163,10 +199,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                if (_currentPage < onboardingPages.length - 1) // Se não for a última página (formulário)
+                if (_currentPage < onboardingPages.length - 1)
                   TextButton(
                     onPressed: () {
-                      _pageController.jumpToPage(onboardingPages.length - 1); // Pular para o formulário
+                      _pageController.jumpToPage(onboardingPages.length - 1);
                     },
                     child: Text('Pular', style: AppStyles.buttonTextStyle.copyWith(color: AppColors.textSecondaryColor)),
                   ),
@@ -203,22 +239,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     Color? blendColor,
   }) {
     return Container(
-      width: double.infinity,  // Garante que ocupa toda a largura disponível
-      height: double.infinity, // Garante que ocupa toda a altura disponível
+      width: double.infinity,
+      height: double.infinity,
       decoration: BoxDecoration(
         image: DecorationImage(
           image: AssetImage(imagePath),
-          fit: BoxFit.cover, // Preenche toda a área, cortando se necessário para manter a proporção
-          colorFilter: blendColor != null ? ColorFilter.mode(blendColor, blendMode ?? BlendMode.srcOver) : null, // Aplica o escurecimento
+          fit: BoxFit.cover,
+          colorFilter: blendColor != null ? ColorFilter.mode(blendColor, blendMode ?? BlendMode.srcOver) : null,
         ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(32.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.end, // Alinha o conteúdo na parte inferior
+          mainAxisAlignment: MainAxisAlignment.end,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            if (title != null) // Só exibe título e descrição se forem fornecidos
+            if (title != null)
               Text(
                 title,
                 style: AppStyles.titleTextStyle.copyWith(fontSize: 32),
@@ -232,7 +268,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 textAlign: TextAlign.center,
               ),
             ],
-            const SizedBox(height: 150), // Espaço para os botões e dots
+            const SizedBox(height: 150),
           ],
         ),
       ),
@@ -255,8 +291,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   // A página do formulário de perfil
   Widget _buildProfileFormPage() {
-    return SingleChildScrollView( // Usar SingleChildScrollView para evitar overflow no formulário
-      padding: const EdgeInsets.fromLTRB(24.0, 60.0, 24.0, 100.0), // Ajustar padding para botões de navegação
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24.0, 60.0, 24.0, 100.0),
       child: Form(
         key: _formKey,
         child: Column(
@@ -378,7 +414,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               },
             ),
             const SizedBox(height: 32),
-            // O botão "Começar" final é controlado pelo Positioned no build principal
           ],
         ),
       ),

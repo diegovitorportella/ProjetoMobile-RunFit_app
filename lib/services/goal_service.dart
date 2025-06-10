@@ -2,8 +2,11 @@
 
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:runfit_app/data/models/goal.dart'; // Importa o modelo Goal
-import 'package:runfit_app/utils/app_constants.dart'; // Para SharedPreferencesKeys e enums
+import 'package:runfit_app/data/models/goal.dart';
+import 'package:runfit_app/utils/app_constants.dart'; // Para SharedPreferencesKeys, enums e FirebaseConstants
+// Importação do Firebase Realtime Database
+import 'package:firebase_database/firebase_database.dart'; // <--- ADICIONE ESTA LINHA
+
 
 class GoalService {
   // Singleton Pattern
@@ -15,31 +18,53 @@ class GoalService {
 
   GoalService._internal();
 
+  // Referência ao banco de dados para as metas do usuário específico
+  // A estrutura será: /users/{userId}/goals
+  late DatabaseReference _userGoalsRef; // <--- MUDANÇA AQUI: Será inicializada
+
+
   List<Goal> _userGoals = [];
 
   // Método para inicializar e carregar as metas
   Future<void> initializeGoals() async {
+    // Inicializa a referência do Firebase com o userId fixo
+    _userGoalsRef = FirebaseDatabase.instance.ref('users/${FirebaseConstants.userId}/goals'); // <--- MUDANÇA AQUI
     await _loadGoals();
   }
 
-  // Carrega as metas do SharedPreferences
+  // Carrega as metas do Firebase (não mais do SharedPreferences)
   Future<void> _loadGoals() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? goalsJson = prefs.getString(SharedPreferencesKeys.userGoalsList);
+    // final prefs = await SharedPreferences.getInstance(); // Não precisa mais
+    // final String? goalsJson = prefs.getString(SharedPreferencesKeys.userGoalsList); // Não precisa mais
 
-    if (goalsJson != null) {
-      final List<dynamic> jsonList = jsonDecode(goalsJson);
-      _userGoals = jsonList.map((json) => Goal.fromJson(json)).toList();
+    final snapshot = await _userGoalsRef.once(); // <--- MUDANÇA AQUI
+    final dynamic goalsData = snapshot.snapshot.value; // <--- MUDANÇA AQUI
+
+    if (goalsData != null && goalsData is Map) {
+      // Firebase Realtime Database retorna mapas aninhados como LinkedMap<Object?, Object?>
+      // É preciso garantir que eles sejam Map<String, dynamic> para o fromJson.
+      List<Goal> loadedGoals = [];
+      goalsData.forEach((key, value) {
+        loadedGoals.add(Goal.fromJson(Map<String, dynamic>.from(value))); // <--- MUDANÇA AQUI
+      });
+      _userGoals = loadedGoals;
     } else {
       _userGoals = [];
     }
   }
 
-  // Salva a lista atual de metas no SharedPreferences
+  // Salva a lista atual de metas no Firebase (não mais no SharedPreferences)
   Future<void> _saveGoals() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String jsonString = jsonEncode(_userGoals.map((goal) => goal.toJson()).toList());
-    await prefs.setString(SharedPreferencesKeys.userGoalsList, jsonString);
+    // final prefs = await SharedPreferences.getInstance(); // Não precisa mais
+    // final String jsonString = jsonEncode(_userGoals.map((goal) => goal.toJson()).toList()); // Não precisa mais
+    // await prefs.setString(SharedPreferencesKeys.userGoalsList, jsonString); // Não precisa mais
+
+    // Converte a lista de metas para um mapa onde a chave é o ID da meta
+    Map<String, dynamic> goalsMap = {};
+    for (var goal in _userGoals) {
+      goalsMap[goal.id] = goal.toJson();
+    }
+    await _userGoalsRef.set(goalsMap); // <--- MUDANÇA AQUI
   }
 
   // Retorna uma cópia da lista de metas
@@ -64,24 +89,21 @@ class GoalService {
     await _saveGoals();
   }
 
-  // NOVO: Método principal para atualizar o progresso das metas
-  // Será chamado após a conclusão de qualquer atividade
+  // Método principal para atualizar o progresso das metas
   Future<List<Goal>> updateGoalsProgress({
     required String modality,
     double? durationMinutes,
     double? distanceKm,
-    // Add parameters for weightlifting, if applicable, like total weight lifted for a session
-    String? completedWorkoutSheetId, // Para metas de conclusão de ficha específica
+    String? completedWorkoutSheetId,
   }) async {
     List<Goal> newlyCompletedGoals = [];
 
-    // Recarrega as metas para garantir que estão atualizadas (evita dessincronização)
+    // Recarrega as metas para garantir que estão atualizadas
     await _loadGoals();
 
     for (int i = 0; i < _userGoals.length; i++) {
       Goal goal = _userGoals[i];
 
-      // Ignora metas já completas
       if (goal.isCompleted) continue;
 
       Goal updatedGoal = goal;
@@ -100,22 +122,18 @@ class GoalService {
           }
           break;
         case GoalType.frequency:
-        // A frequência pode ser tratada como 1 treino = 1 incremento para metas de frequência
           updatedGoal = goal.copyWith(currentValue: goal.currentValue + 1);
           break;
         case GoalType.weight:
-        // Implementar lógica de atualização de peso aqui no futuro
-        // Por exemplo, somar carga total levantada na sessão se houver dados detalhados
-        // Para MVP, pode ser um placeholder ou requer entrada manual na meta
+        // Lógica de atualização de peso (manter como está ou implementar se dados de peso forem registrados)
           break;
         case GoalType.workoutSheetCompletion:
           if (completedWorkoutSheetId != null && goal.relatedItemId == completedWorkoutSheetId) {
-            updatedGoal = goal.copyWith(currentValue: 1.0); // Marca como 100% completo
+            updatedGoal = goal.copyWith(currentValue: 1.0);
           }
           break;
       }
 
-      // Verifica se a meta foi concluída
       if (!updatedGoal.isCompleted && updatedGoal.currentValue >= updatedGoal.targetValue) {
         updatedGoal = updatedGoal.copyWith(isCompleted: true, completedAt: DateTime.now());
         newlyCompletedGoals.add(updatedGoal);
@@ -124,23 +142,20 @@ class GoalService {
       _userGoals[i] = updatedGoal;
     }
 
-    await _saveGoals();
-    return newlyCompletedGoals; // Retorna as metas recém-concluídas
+    await _saveGoals(); // Salva as metas atualizadas no Firebase
+    return newlyCompletedGoals;
   }
 
-  // Helpers de conversão de unidades (simplificados para o MVP)
+  // Helpers de conversão de unidades (mantidos iguais)
   double _convertDistanceToGoalUnit(double value, GoalUnit fromUnit, GoalUnit toUnit) {
     if (fromUnit == toUnit) return value;
-    // Conversões básicas (pode ser expandido)
     if (fromUnit == GoalUnit.km && toUnit == GoalUnit.meters) return value * 1000;
     if (fromUnit == GoalUnit.meters && toUnit == GoalUnit.km) return value / 1000;
-    // Adicionar outras conversões (milhas, etc.)
-    return value; // Retorna o valor original se não houver conversão definida
+    return value;
   }
 
   double _convertDurationToGoalUnit(double value, GoalUnit fromUnit, GoalUnit toUnit) {
     if (fromUnit == toUnit) return value;
-    // Conversões básicas
     if (fromUnit == GoalUnit.minutes && toUnit == GoalUnit.hours) return value / 60;
     if (fromUnit == GoalUnit.hours && toUnit == GoalUnit.minutes) return value * 60;
     return value;
