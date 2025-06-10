@@ -58,4 +58,5 @@ class SharedPreferencesKeys {
   static const String weightliftingWorkoutsCompleted = 'weightliftingWorkoutsCompleted'; // Contador de treinos de musculação
   static const String runningWorkoutsCompleted = 'runningWorkoutsCompleted'; // Contador de treinos de corrida
   static const String profileImagePath = 'profileImagePath'; // NOVO: Chave para o caminho da imagem de perfil
+  static const String userGoalsList = 'userGoalsList'; // NOVO: Chave para a lista de metas do usuário
 }

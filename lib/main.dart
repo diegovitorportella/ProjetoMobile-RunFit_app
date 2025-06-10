@@ -1,15 +1,19 @@
 // lib/main.dart
 
 import 'package:flutter/material.dart';
-import 'package:runfit_app/screens/splash_screen.dart';
+// Remova a importação de splash_screen.dart
+// import 'package:runfit_app/screens/splash_screen.dart'; // Remova ou comente esta linha
+import 'package:runfit_app/screens/onboarding_screen.dart'; // Certifique-se de que esta importação existe
 import 'package:runfit_app/utils/app_colors.dart';
 import 'package:runfit_app/utils/app_text_input_themes.dart';
 import 'package:runfit_app/utils/app_styles.dart';
-import 'package:runfit_app/services/achievement_service.dart'; // Importe o serviço
+import 'package:runfit_app/services/achievement_service.dart';
+import 'package:runfit_app/services/goal_service.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized(); // Garante que o Flutter está inicializado
-  await AchievementService().initializeAchievements(); // Inicializa o serviço e carrega dados
+  WidgetsFlutterBinding.ensureInitialized();
+  await AchievementService().initializeAchievements();
+  await GoalService().initializeGoals();
   runApp(const MyApp());
 }
 
@@ -36,8 +40,8 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.dark(
           primary: AppColors.primaryColor,
           onPrimary: AppColors.textPrimaryColor,
-          secondary: AppColors.accentColor, // Cor de destaque principal (agora vermelho)
-          onSecondary: AppColors.textPrimaryColor, // Texto/ícone sobre o destaque
+          secondary: AppColors.accentColor,
+          onSecondary: AppColors.textPrimaryColor,
           background: AppColors.primaryColor,
           onBackground: AppColors.textPrimaryColor,
           surface: AppColors.cardColor,
@@ -50,7 +54,7 @@ class MyApp extends StatelessWidget {
         ),
         textButtonTheme: TextButtonThemeData(
           style: TextButton.styleFrom(
-            foregroundColor: AppColors.accentColor, // MANTENHA VERMELHO se quiser que TextButton seja vermelho
+            foregroundColor: AppColors.accentColor,
             textStyle: AppStyles.buttonTextStyle.copyWith(
               fontSize: 14,
               fontWeight: FontWeight.normal,
@@ -61,7 +65,7 @@ class MyApp extends StatelessWidget {
           textStyle: AppStyles.bodyStyle.copyWith(color: AppColors.textPrimaryColor),
         ),
       ),
-      home: const SplashScreen(),
+      home: const OnboardingScreen(), // NOVO: Inicia diretamente com a OnboardingScreen
     );
   }
 }

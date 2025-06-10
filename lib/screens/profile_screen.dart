@@ -7,10 +7,11 @@ import 'package:runfit_app/utils/app_colors.dart';
 import 'package:runfit_app/utils/app_styles.dart';
 import 'package:runfit_app/utils/app_constants.dart';
 import 'package:runfit_app/screens/achievements_screen.dart';
-import 'package:image_picker/image_picker.dart'; // Importe o image_picker
-import 'dart:io'; // Importe para File
-import 'package:flutter/foundation.dart' show kIsWeb; // Importe para kIsWeb
-import 'package:runfit_app/screens/about_app_screen.dart'; // NOVO: Importe a tela Sobre o App
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:runfit_app/screens/about_app_screen.dart';
+import 'package:runfit_app/screens/goals_screen.dart'; // NOVO: Importar a GoalsScreen
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -30,10 +31,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _userModality;
   String? _userLevel;
   String? _userFrequency;
-  String? _profileImagePath; // Caminho da imagem de perfil (pode ser URL blob na web)
+  String? _profileImagePath;
 
   final _formKey = GlobalKey<FormState>();
-  final ImagePicker _picker = ImagePicker(); // Instância do ImagePicker
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -61,7 +62,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _userModality = prefs.getString(SharedPreferencesKeys.userModality);
       _userLevel = prefs.getString(SharedPreferencesKeys.userLevel);
       _userFrequency = prefs.getString(SharedPreferencesKeys.userFrequency);
-      _profileImagePath = prefs.getString(SharedPreferencesKeys.profileImagePath); // Carrega o caminho/URL da imagem de perfil
+      _profileImagePath = prefs.getString(SharedPreferencesKeys.profileImagePath);
     });
   }
 
@@ -91,7 +92,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (_userFrequency != null) {
         await prefs.setString(SharedPreferencesKeys.userFrequency, _userFrequency!);
       }
-      // O caminho da imagem já é salvo por _pickImage, não precisa salvar aqui novamente
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -105,7 +105,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // Método para selecionar e salvar a imagem de perfil
   Future<void> _pickImage() async {
     showModalBottomSheet(
       context: context,
@@ -146,17 +145,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       String? pathOrUrl;
 
       if (kIsWeb) {
-        // Na web, o 'path' do XFile é a URL blob
         pathOrUrl = pickedFile.path;
       } else {
-        // Em outras plataformas (Android/iOS), é um caminho de arquivo
         pathOrUrl = pickedFile.path;
       }
 
-      // Salvar o caminho da imagem (ou URL blob para web)
       await prefs.setString(SharedPreferencesKeys.profileImagePath, pathOrUrl!);
       setState(() {
-        _profileImagePath = pathOrUrl; // Atualiza o estado para exibir a nova imagem
+        _profileImagePath = pathOrUrl;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -183,10 +179,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ImageProvider? profileImageProvider;
     if (_profileImagePath != null) {
       if (kIsWeb) {
-        // Se for web, o caminho é uma URL blob
         profileImageProvider = NetworkImage(_profileImagePath!);
       } else {
-        // Se não for web, é um caminho de arquivo local
         profileImageProvider = FileImage(File(_profileImagePath!));
       }
     }
@@ -204,15 +198,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: <Widget>[
               Center(
                 child: GestureDetector(
-                  onTap: _pickImage, // Chama a função para selecionar imagem
+                  onTap: _pickImage,
                   child: Stack(
                     alignment: Alignment.bottomRight,
                     children: [
                       CircleAvatar(
                         radius: 60,
                         backgroundColor: AppColors.cardColor,
-                        // Exibe a imagem salva ou um ícone padrão
-                        backgroundImage: profileImageProvider, // Usa o ImageProvider correto
+                        backgroundImage: profileImageProvider,
                         child: profileImageProvider == null
                             ? Icon(
                           Icons.person,
@@ -239,7 +232,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              // Campo de Nome
               TextFormField(
                 controller: _nameController,
                 style: AppStyles.bodyStyle.copyWith(color: AppColors.textPrimaryColor),
@@ -256,7 +248,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Campo de Gênero
               DropdownButtonFormField<String>(
                 value: _userGender,
                 decoration: const InputDecoration(
@@ -288,7 +279,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Campo de Idade
               TextFormField(
                 controller: _ageController,
                 keyboardType: TextInputType.number,
@@ -310,7 +300,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Campo de Altura
               TextFormField(
                 controller: _heightController,
                 keyboardType: TextInputType.number,
@@ -332,7 +321,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Campo de Peso
               TextFormField(
                 controller: _weightController,
                 keyboardType: TextInputType.number,
@@ -354,7 +342,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Dropdown de Modalidade
               DropdownButtonFormField<String>(
                 value: _userModality,
                 decoration: const InputDecoration(
@@ -383,7 +370,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Dropdown de Nível
               DropdownButtonFormField<String>(
                 value: _userLevel,
                 decoration: const InputDecoration(
@@ -412,7 +398,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Dropdown de Frequência de Treino
               DropdownButtonFormField<String>(
                 value: _userFrequency,
                 decoration: const InputDecoration(
@@ -445,7 +430,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 32),
 
-              // Botão para Conquistas
               ListTile(
                 leading: Icon(Icons.military_tech_outlined, color: AppColors.textPrimaryColor),
                 title: Text('Minhas Conquistas', style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold)),
@@ -459,7 +443,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               Divider(color: AppColors.borderColor, height: 1),
 
-              // NOVO: Botão para a tela "Sobre o Aplicativo"
+              // NOVO: ListTile para Metas
+              ListTile(
+                leading: Icon(Icons.track_changes, color: AppColors.textPrimaryColor),
+                title: Text('Minhas Metas', style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold)),
+                trailing: Icon(Icons.arrow_forward_ios, color: AppColors.textSecondaryColor),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const GoalsScreen()), // Navega para GoalsScreen
+                  );
+                },
+              ),
+              Divider(color: AppColors.borderColor, height: 1),
+
               ListTile(
                 leading: Icon(Icons.info_outline, color: AppColors.textPrimaryColor),
                 title: Text('Sobre o Aplicativo', style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold)),

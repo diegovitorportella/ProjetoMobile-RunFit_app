@@ -49,6 +49,19 @@ class AchievementService {
         description: 'Conclua todos os treinos da sua meta semanal.',
         icon: Icons.calendar_today,
       ),
+      // NOVO: Exemplo de conquista mais "dinâmica" com base em contadores (total de treinos)
+      Achievement(
+        id: 'ten_workouts_done',
+        title: 'Veterano do Treino!',
+        description: 'Complete 10 treinos no total.',
+        icon: Icons.star,
+      ),
+      Achievement(
+        id: 'twenty_workouts_done',
+        title: 'Super Atleta!',
+        description: 'Complete 20 treinos no total.',
+        icon: Icons.local_fire_department,
+      ),
       // Adicione mais conquistas aqui conforme necessário
     ];
 
@@ -60,9 +73,25 @@ class AchievementService {
       _allAchievements = jsonList.map((json) => Achievement.fromJson(json)).toList();
 
       // Mesclar com as conquistas padrão para adicionar novas ou atualizar existentes
+      // Isso é importante para garantir que novas conquistas adicionadas ao 'defaultAchievements'
+      // sejam incluídas para usuários existentes.
       for (var defaultAch in defaultAchievements) {
         if (!_allAchievements.any((ach) => ach.id == defaultAch.id)) {
           _allAchievements.add(defaultAch);
+        } else {
+          // Opcional: Atualizar descrição ou ícone de conquistas existentes se eles mudarem
+          final existingAchIndex = _allAchievements.indexWhere((ach) => ach.id == defaultAch.id);
+          if (existingAchIndex != -1) {
+            final existingAch = _allAchievements[existingAchIndex];
+            _allAchievements[existingAchIndex] = Achievement(
+              id: defaultAch.id,
+              title: defaultAch.title,
+              description: defaultAch.description,
+              icon: defaultAch.icon,
+              isUnlocked: existingAch.isUnlocked, // Mantém o status de desbloqueio
+              unlockedDate: existingAch.unlockedDate, // Mantém a data de desbloqueio
+            );
+          }
         }
       }
     } else {
@@ -85,17 +114,19 @@ class AchievementService {
   }
 
   // Desbloqueia uma conquista específica e a salva
-  Future<void> unlockAchievement(String achievementId) async {
+  // Retorna a conquista desbloqueada se foi um novo desbloqueio, ou null.
+  Future<Achievement?> unlockAchievement(String achievementId) async {
     final achievementIndex = _allAchievements.indexWhere((ach) => ach.id == achievementId);
     if (achievementIndex != -1 && !_allAchievements[achievementIndex].isUnlocked) {
-      _allAchievements[achievementIndex] = _allAchievements[achievementIndex].copyWith(
+      final unlockedAchievement = _allAchievements[achievementIndex].copyWith(
         isUnlocked: true,
         unlockedDate: DateTime.now(),
       );
+      _allAchievements[achievementIndex] = unlockedAchievement;
       await _saveAchievements();
-      // Opcional: Notificar o usuário sobre a conquista desbloqueada
-      // print('Conquista desbloqueada: ${_allAchievements[achievementIndex].title}');
+      return unlockedAchievement; // Retorna a conquista que acabou de ser desbloqueada
     }
+    return null; // Nenhuma nova conquista desbloqueada
   }
 
   // Métodos para incrementar contadores (chamados da HomeScreen ou ActivityLogScreen)
@@ -117,8 +148,8 @@ class AchievementService {
     await prefs.setInt(SharedPreferencesKeys.runningWorkoutsCompleted, count + 1);
   }
 
-  /// NOVO MÉTODO: Centraliza a notificação de treino concluído
-  Future<void> notifyWorkoutCompleted(String modality) async {
+  /// NOVO MÉTODO: Centraliza a notificação de treino concluído e retorna a conquista desbloqueada (se houver)
+  Future<Achievement?> notifyWorkoutCompleted(String modality) async {
     await incrementTotalWorkoutsCompleted();
 
     if (modality.toLowerCase() == WorkoutModality.musculacao.name.toLowerCase()) {
@@ -127,18 +158,20 @@ class AchievementService {
       await incrementRunningWorkoutsCompleted();
     }
     // Chame a verificação de conquistas após atualizar os contadores
-    await checkAndUnlockAchievements(modality);
+    return await checkAndUnlockAchievements(modality); // Retorna a conquista desbloqueada
   }
 
 
   // Método para verificar e desbloquear conquistas com base nos contadores
-  Future<void> checkAndUnlockAchievements(String? modality) async {
+  Future<Achievement?> checkAndUnlockAchievements(String? modality) async {
     final prefs = await SharedPreferences.getInstance();
+    Achievement? unlockedAchievement; // Para armazenar a primeira conquista desbloqueada
 
     // 1. Conquista de Primeiro Treino Concluído
     final totalWorkouts = (prefs.getInt(SharedPreferencesKeys.totalWorkoutsCompleted) ?? 0);
     if (totalWorkouts >= 1) {
-      await unlockAchievement('first_workout_completed');
+      final result = await unlockAchievement('first_workout_completed');
+      if (result != null) unlockedAchievement = result;
     }
 
     // 2. Conquistas de Modalidade (Mestre da Musculação / Campeão da Corrida)
@@ -146,28 +179,43 @@ class AchievementService {
       if (modality.toLowerCase() == WorkoutModality.musculacao.name.toLowerCase()) {
         final weightliftingWorkouts = (prefs.getInt(SharedPreferencesKeys.weightliftingWorkoutsCompleted) ?? 0);
         if (weightliftingWorkouts >= 5) { // Altere o número conforme a regra da sua conquista
-          await unlockAchievement('master_weightlifting');
+          final result = await unlockAchievement('master_weightlifting');
+          if (result != null && unlockedAchievement == null) unlockedAchievement = result;
         }
       } else if (modality.toLowerCase() == WorkoutModality.corrida.name.toLowerCase()) {
         final runningWorkouts = (prefs.getInt(SharedPreferencesKeys.runningWorkoutsCompleted) ?? 0);
         if (runningWorkouts >= 5) { // Altere o número conforme a regra da sua conquista
-          await unlockAchievement('champion_running');
+          final result = await unlockAchievement('champion_running');
+          if (result != null && unlockedAchievement == null) unlockedAchievement = result;
         }
       }
     }
+
+    // 3. Conquistas de Total de Treinos
+    if (totalWorkouts >= 10) {
+      final result = await unlockAchievement('ten_workouts_done');
+      if (result != null && unlockedAchievement == null) unlockedAchievement = result;
+    }
+    if (totalWorkouts >= 20) {
+      final result = await unlockAchievement('twenty_workouts_done');
+      if (result != null && unlockedAchievement == null) unlockedAchievement = result;
+    }
+
     // A conquista 'Primeira Semana Consistente' será checada no reset semanal na HomeScreen
+    return unlockedAchievement; // Retorna a primeira conquista desbloqueada nesta checagem
   }
 
   // Chamado durante o reset semanal na HomeScreen
-  Future<void> checkConsistentWeekAchievement() async {
+  Future<Achievement?> checkConsistentWeekAchievement() async {
     final prefs = await SharedPreferences.getInstance();
     final targetWorkouts = prefs.getInt(SharedPreferencesKeys.targetWorkoutsThisWeek) ?? 0;
     final completedWorkouts = prefs.getInt(SharedPreferencesKeys.completedWorkoutsThisWeek) ?? 0;
 
     // Só desbloqueia se a meta for maior que 0 e se os treinos concluídos atingirem a meta
     if (targetWorkouts > 0 && completedWorkouts >= targetWorkouts) {
-      await unlockAchievement('consistent_week');
+      return await unlockAchievement('consistent_week');
     }
+    return null;
   }
 
   // Método para resetar todos os dados de conquistas e contadores (útil para testes)

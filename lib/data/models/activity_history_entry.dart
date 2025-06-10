@@ -2,6 +2,44 @@
 
 import 'package:flutter/material.dart';
 
+// NOVO: Modelo para exercícios registrados em atividades de musculação avulsas
+class LoggedExercise {
+  final String name;
+  final String sets; // Pode ser "3" (séries) ou "3x" (para 3 sets de algo)
+  final String reps; // Pode ser "10" (repetições) ou "8-12"
+  final String? load; // Ex: "20kg", "DBs 10kg", "BW" (bodyweight)
+  final String? notes; // Notas específicas para este exercício
+
+  LoggedExercise({
+    required this.name,
+    required this.sets,
+    required this.reps,
+    this.load,
+    this.notes,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'sets': sets,
+      'reps': reps,
+      'load': load,
+      'notes': notes,
+    };
+  }
+
+  factory LoggedExercise.fromJson(Map<String, dynamic> json) {
+    return LoggedExercise(
+      name: json['name'],
+      sets: json['sets'],
+      reps: json['reps'],
+      load: json['load'],
+      notes: json['notes'],
+    );
+  }
+}
+
+
 class ActivityHistoryEntry {
   final String id;
   final DateTime date;
@@ -16,6 +54,7 @@ class ActivityHistoryEntry {
   final double? longitude;
   final List<Map<String, double>>? pathCoordinates;
   final String? averagePace; // NOVO CAMPO: Para armazenar o pace médio formatado
+  final List<LoggedExercise>? loggedExercises; // NOVO CAMPO: Para detalhes de exercícios de musculação
 
   ActivityHistoryEntry({
     required this.id,
@@ -30,7 +69,8 @@ class ActivityHistoryEntry {
     this.latitude,
     this.longitude,
     this.pathCoordinates,
-    this.averagePace, // NOVO CAMPO NO CONSTRUTOR
+    this.averagePace,
+    this.loggedExercises, // Adicione ao construtor
   });
 
   Map<String, dynamic> toJson() {
@@ -47,7 +87,8 @@ class ActivityHistoryEntry {
       'latitude': latitude,
       'longitude': longitude,
       'pathCoordinates': pathCoordinates,
-      'averagePace': averagePace, // NOVO CAMPO NO TOJSON
+      'averagePace': averagePace,
+      'loggedExercises': loggedExercises?.map((e) => e.toJson()).toList(), // Adicione ao toJson
     };
   }
 
@@ -67,7 +108,10 @@ class ActivityHistoryEntry {
       pathCoordinates: (json['pathCoordinates'] as List?)
           ?.map((e) => Map<String, double>.from(e as Map))
           .toList(),
-      averagePace: json['averagePace'], // NOVO CAMPO NO FROMJSON
+      averagePace: json['averagePace'],
+      loggedExercises: (json['loggedExercises'] as List?) // Adicione ao fromJson
+          ?.map((e) => LoggedExercise.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 }

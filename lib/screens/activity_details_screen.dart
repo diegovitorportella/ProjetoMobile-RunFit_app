@@ -136,6 +136,50 @@ class _ActivityDetailsScreenState extends State<ActivityDetailsScreen> {
                   if (widget.activity.notes != null && widget.activity.notes!.isNotEmpty)
                     Text('Notas: ${widget.activity.notes}', style: AppStyles.bodyStyle),
                   // Adicione outros detalhes relevantes aqui
+
+                  // NOVO: Exibir exercícios detalhados para Musculação
+                  if (widget.modality == WorkoutModality.musculacao.name && widget.activity.loggedExercises != null && widget.activity.loggedExercises!.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Exercícios:',
+                      style: AppStyles.headingStyle.copyWith(fontSize: 18),
+                    ),
+                    const SizedBox(height: 8),
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: widget.activity.loggedExercises!.length,
+                      itemBuilder: (context, exerciseIndex) {
+                        final exercise = widget.activity.loggedExercises![exerciseIndex];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                exercise.name,
+                                style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                'Séries: ${exercise.sets}, Repetições: ${exercise.reps}',
+                                style: AppStyles.smallTextStyle.copyWith(color: AppColors.textSecondaryColor),
+                              ),
+                              if (exercise.load != null && exercise.load!.isNotEmpty)
+                                Text(
+                                  'Carga: ${exercise.load}',
+                                  style: AppStyles.smallTextStyle.copyWith(color: AppColors.textSecondaryColor),
+                                ),
+                              if (exercise.notes != null && exercise.notes!.isNotEmpty)
+                                Text(
+                                  'Notas do Exercício: ${exercise.notes}',
+                                  style: AppStyles.smallTextStyle.copyWith(fontStyle: FontStyle.italic),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ],
               ),
             ),

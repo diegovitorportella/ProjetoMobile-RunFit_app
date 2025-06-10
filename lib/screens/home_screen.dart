@@ -13,9 +13,12 @@ import 'package:runfit_app/data/models/activity_history_entry.dart';
 import 'package:uuid/uuid.dart';
 import 'package:runfit_app/screens/activity_history_screen.dart';
 import 'package:runfit_app/services/achievement_service.dart';
+import 'package:runfit_app/data/models/achievement.dart'; // Certifique-se de que está importado
 import 'package:runfit_app/screens/profile_screen.dart';
 import 'package:runfit_app/screens/achievements_screen.dart';
 import 'package:runfit_app/screens/activity_selection_screen.dart';
+import 'package:runfit_app/services/goal_service.dart'; // NOVO: Importar GoalService
+import 'package:runfit_app/data/models/goal.dart'; // NOVO: Importar modelo Goal
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback? onNavigateToWorkoutSheets;
@@ -28,7 +31,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String _userName = '';
-  String _userModality = 'N/A'; // Mantido para exibição no perfil, mas não para o registro da ficha
+  String _userModality = 'N/A';
   String _userLevel = 'N/A';
   String _userFrequency = 'N/A';
   int _completedWorkoutsThisWeek = 0;
@@ -36,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
   WorkoutSheet? _activeWorkoutSheet;
   final Uuid _uuid = const Uuid();
   final AchievementService _achievementService = AchievementService();
+  final GoalService _goalService = GoalService(); // NOVO: Instanciar GoalService
 
   @override
   void initState() {
@@ -125,7 +129,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final currentMonday = now.subtract(Duration(days: now.weekday - 1));
 
     if (lastResetDate == null || lastResetDate.isBefore(currentMonday.add(const Duration(hours: -1)))) {
-      await _achievementService.checkConsistentWeekAchievement();
+      final unlockedAch = await _achievementService.checkConsistentWeekAchievement();
+      if (unlockedAch != null && mounted) {
+        _showAchievementUnlockedDialog(unlockedAch);
+      }
 
       await prefs.setInt(SharedPreferencesKeys.completedWorkoutsThisWeek, 0);
       await prefs.setString(SharedPreferencesKeys.lastWeeklyResetDate, now.toIso8601String());
@@ -172,7 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final newEntry = ActivityHistoryEntry(
         id: _uuid.v4(),
         date: DateTime.now(),
-        modality: _activeWorkoutSheet!.modality.name, // CORRIGIDO AQUI: Pega a modalidade diretamente da ficha ativa
+        modality: _activeWorkoutSheet!.modality.name,
         activityType: 'Ficha de Treino',
         workoutSheetName: _activeWorkoutSheet!.name,
         workoutSheetData: jsonEncode(_activeWorkoutSheet!.toJson()),
@@ -184,16 +191,27 @@ class _HomeScreenState extends State<HomeScreen> {
       historyJsonList.add(jsonEncode(newEntry.toJson()));
       await prefs.setStringList(SharedPreferencesKeys.activityHistory, historyJsonList);
 
-      // RESTAURADO: Atualizar contador de treinos concluídos esta semana
       final currentCompleted = prefs.getInt(SharedPreferencesKeys.completedWorkoutsThisWeek) ?? 0;
       await prefs.setInt(SharedPreferencesKeys.completedWorkoutsThisWeek, currentCompleted + 1);
       setState(() {
         _completedWorkoutsThisWeek = currentCompleted + 1;
       });
 
-      // Notificar o serviço de conquistas
-      await _achievementService.notifyWorkoutCompleted(_activeWorkoutSheet!.modality.name);
+      final unlockedAch = await _achievementService.notifyWorkoutCompleted(_activeWorkoutSheet!.modality.name);
+      if (unlockedAch != null && mounted) {
+        _showAchievementUnlockedDialog(unlockedAch);
+      }
 
+      // NOVO: Atualizar metas ao concluir uma ficha de treino
+      final newlyCompletedGoals = await _goalService.updateGoalsProgress(
+        modality: _activeWorkoutSheet!.modality.name,
+        completedWorkoutSheetId: _activeWorkoutSheet!.id,
+      );
+      if (mounted) {
+        for (var goal in newlyCompletedGoals) {
+          _showGoalCompletedDialog(goal);
+        }
+      }
 
       _activeWorkoutSheet = _activeWorkoutSheet!.copyWith(
         exercises: _activeWorkoutSheet!.exercises.map((e) => e.copyWith(isCompleted: false)).toList(),
@@ -214,6 +232,83 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _showAchievementUnlockedDialog(Achievement achievement) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: AppColors.cardColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15.0)),
+          title: Row(
+            children: [
+              Icon(achievement.icon, color: AppColors.successColor, size: 30),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Conquista Desbloqueada!', style: AppStyles.headingStyle.copyWith(color: AppColors.successColor)),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(achievement.title, style: AppStyles.titleTextStyle.copyWith(fontSize: 22, color: AppColors.textPrimaryColor)),
+              const SizedBox(height: 8),
+              Text(achievement.description, style: AppStyles.bodyStyle.copyWith(color: AppColors.textSecondaryColor)),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Entendi', style: AppStyles.buttonTextStyle.copyWith(color: AppColors.accentColor)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // NOVO MÉTODO: Exibe um diálogo de meta concluída
+  void _showGoalCompletedDialog(Goal goal) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: AppColors.cardColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15.0)),
+          title: Row(
+            children: [
+              Icon(Icons.flag_outlined, color: AppColors.successColor, size: 30),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Meta Concluída!', style: AppStyles.headingStyle.copyWith(color: AppColors.successColor)),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(goal.name, style: AppStyles.titleTextStyle.copyWith(fontSize: 22, color: AppColors.textPrimaryColor)),
+              const SizedBox(height: 8),
+              Text('Parabéns! Você alcançou sua meta de ${goal.targetValue.toStringAsFixed(goal.type == GoalType.distance || goal.type == GoalType.weight ? 1 : 0)} ${goal.unit.name.toLowerCase()}.', style: AppStyles.bodyStyle.copyWith(color: AppColors.textSecondaryColor)),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Uhuul!', style: AppStyles.buttonTextStyle.copyWith(color: AppColors.accentColor)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _navigateToActivityLog() {
     Navigator.push(
       context,
@@ -223,6 +318,7 @@ class _HomeScreenState extends State<HomeScreen> {
     ).then((_) {
       _loadUserPreferences();
       _loadActiveWorkoutSheet();
+      _goalService.initializeGoals(); // Recarrega metas para atualizar a UI caso o progresso tenha mudado
     });
   }
 
@@ -389,12 +485,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                     'Séries/Repetições: ${exercise.setsReps}',
                                     style: AppStyles.smallTextStyle,
                                   ),
+                                  if (exercise.load != null && exercise.load!.isNotEmpty)
+                                    Text(
+                                      'Carga: ${exercise.load}',
+                                      style: AppStyles.smallTextStyle.copyWith(color: AppColors.textSecondaryColor),
+                                    ),
                                   if (exercise.notes != null && exercise.notes!.isNotEmpty)
                                     Text(
                                       'Notas: ${exercise.notes!}',
                                       style: AppStyles.smallTextStyle,
                                     ),
-                                  // --- AQUI É ONDE ADICIONAMOS A IMAGEM ---
                                   if (exercise.imageUrl != null && exercise.imageUrl!.isNotEmpty)
                                     Padding(
                                       padding: const EdgeInsets.only(top: 8.0),
@@ -402,11 +502,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                         borderRadius: BorderRadius.circular(8.0),
                                         child: Image.asset(
                                           exercise.imageUrl!,
-                                          height: 180, // AUMENTADO PARA 180
+                                          height: 180,
                                           width: double.infinity,
                                           fit: BoxFit.cover,
                                           errorBuilder: (context, error, stackTrace) => Container(
-                                            height: 180, // AUMENTADO PARA 180 (para o placeholder também)
+                                            height: 180,
                                             width: double.infinity,
                                             color: AppColors.borderColor,
                                             child: Center(

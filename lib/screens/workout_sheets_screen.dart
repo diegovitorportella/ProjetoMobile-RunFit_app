@@ -9,6 +9,7 @@ import 'package:runfit_app/utils/app_colors.dart';
 import 'package:runfit_app/utils/app_styles.dart';
 import 'package:runfit_app/utils/app_constants.dart';
 import 'package:flutter/cupertino.dart'; // Para CupertinoSlidingSegmentedControl
+import 'package:runfit_app/screens/workout_sheet_form_screen.dart'; // NOVO: Importar a tela de formulário
 
 class WorkoutSheetsScreen extends StatefulWidget {
   const WorkoutSheetsScreen({super.key});
@@ -30,6 +31,11 @@ class _WorkoutSheetsScreenState extends State<WorkoutSheetsScreen> {
 
   // Mapa para agrupar as fichas por modalidade (ou outra categoria)
   Map<String, List<WorkoutSheet>> _groupedWorkouts = {};
+
+  // NOVO: Lista para armazenar fichas criadas pelo usuário (não persistidas entre sessões)
+  // Estas fichas serão adicionadas à _allWorkoutSheets em tempo de execução
+  final List<WorkoutSheet> _userCreatedWorkouts = [];
+
 
   @override
   void initState() {
@@ -67,7 +73,12 @@ class _WorkoutSheetsScreenState extends State<WorkoutSheetsScreen> {
       final String response = await rootBundle.loadString('assets/data/workout_sheets.json');
       final data = json.decode(response) as List;
       setState(() {
+        // Carrega as fichas padrão
         _allWorkoutSheets = data.map((json) => WorkoutSheet.fromJson(json)).toList();
+        // Adiciona as fichas criadas pelo usuário na sessão atual
+        _allWorkoutSheets.addAll(_userCreatedWorkouts);
+
+
         _allWorkoutSheets.forEach((sheet) {
           // Marca a ficha como ativa se o ID corresponder
           if (sheet.id == _activeWorkoutSheetId) {
@@ -76,13 +87,20 @@ class _WorkoutSheetsScreenState extends State<WorkoutSheetsScreen> {
         });
       });
     } catch (e) {
+      // ignore: avoid_print
       print('Erro ao carregar fichas de treino: $e');
     }
   }
 
   // NOVO: Método para aplicar filtros e agrupar
   void _applyFiltersAndGroupWorkouts() {
-    List<WorkoutSheet> filteredWorkouts = _allWorkoutSheets.where((sheet) {
+    // A lista a ser filtrada deve incluir tanto as fichas padrão quanto as criadas pelo usuário
+    List<WorkoutSheet> currentWorkouts = List.from(_allWorkoutSheets);
+    // Garante que não adiciona duplicatas se _loadAllWorkoutSheets já as incluiu
+    currentWorkouts.addAll(_userCreatedWorkouts.where((sheet) => !_allWorkoutSheets.any((s) => s.id == sheet.id)));
+
+
+    List<WorkoutSheet> filteredWorkouts = currentWorkouts.where((sheet) {
       bool matchesModality = true;
       bool matchesLevel = true;
       bool matchesSearch = true;
@@ -126,25 +144,33 @@ class _WorkoutSheetsScreenState extends State<WorkoutSheetsScreen> {
     final prefs = await SharedPreferences.getInstance();
     final currentActiveSheetId = prefs.getString(SharedPreferencesKeys.activeWorkoutSheetId);
 
+    // Encontrar a ficha que está sendo ativada/desativada
+    // Deve procurar tanto nas fichas padrão quanto nas criadas pelo usuário
+    final targetSheet = [..._allWorkoutSheets, ..._userCreatedWorkouts].firstWhere((sheet) => sheet.id == sheetId);
+    final bool willBeActive = !targetSheet.isActive; // Inverte o estado
+
     setState(() {
       // Desativar a ficha atualmente ativa, se houver
       if (currentActiveSheetId != null && currentActiveSheetId != sheetId) {
-        final oldActiveSheet = _allWorkoutSheets.firstWhere(
-              (sheet) => sheet.id == currentActiveSheetId,
-          orElse: () => _allWorkoutSheets.first, // Fallback, though ideally it should be found
-        );
-        oldActiveSheet.isActive = false;
+        // Procura e desativa na lista _allWorkoutSheets
+        final oldActiveSheetIndex = _allWorkoutSheets.indexWhere((sheet) => sheet.id == currentActiveSheetId);
+        if (oldActiveSheetIndex != -1) {
+          _allWorkoutSheets[oldActiveSheetIndex].isActive = false;
+        } else {
+          // Também verificar nas fichas criadas pelo usuário
+          final oldUserActiveSheetIndex = _userCreatedWorkouts.indexWhere((sheet) => sheet.id == currentActiveSheetId);
+          if (oldUserActiveSheetIndex != -1) {
+            _userCreatedWorkouts[oldUserActiveSheetIndex].isActive = false;
+          }
+        }
       }
-
-      // Encontrar a ficha que está sendo ativada/desativada
-      final targetSheet = _allWorkoutSheets.firstWhere((sheet) => sheet.id == sheetId);
-      final bool willBeActive = !targetSheet.isActive; // Inverte o estado
 
       targetSheet.isActive = willBeActive;
 
       if (willBeActive) {
         _activeWorkoutSheetId = sheetId;
         // Salva o JSON completo da ficha (com o estado inicial dos exercícios resetado)
+        // Garante que a ficha salva não está ativada, para que o progresso seja resetado
         final sheetToSave = WorkoutSheet(
           id: targetSheet.id,
           name: targetSheet.name,
@@ -157,6 +183,7 @@ class _WorkoutSheetsScreenState extends State<WorkoutSheetsScreen> {
             setsReps: e.setsReps,
             notes: e.notes,
             imageUrl: e.imageUrl,
+            load: e.load, // Inclui o campo 'load'
             isCompleted: false, // IMPORTANTE: Reseta o estado aqui
           )).toList(),
           icon: targetSheet.icon,
@@ -172,6 +199,71 @@ class _WorkoutSheetsScreenState extends State<WorkoutSheetsScreen> {
     });
     _applyFiltersAndGroupWorkouts(); // Reaplicar filtros para atualizar o estado visual
   }
+
+  // NOVO: Método para navegar para a tela de criação/edição
+  void _navigateToWorkoutSheetForm({WorkoutSheet? workoutSheet}) async {
+    final result = await Navigator.push<WorkoutSheet>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => WorkoutSheetFormScreen(workoutSheet: workoutSheet),
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        if (workoutSheet == null) {
+          // É uma nova ficha, adiciona à lista de fichas criadas pelo usuário
+          _userCreatedWorkouts.add(result);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ficha "${result.name}" criada com sucesso!', style: AppStyles.smallTextStyle),
+              backgroundColor: AppColors.successColor.withAlpha((255 * 0.7).round()),
+            ),
+          );
+        } else {
+          // É uma ficha existente sendo editada
+          // Remove a versão antiga e adiciona a nova na lista de fichas criadas pelo usuário
+          final int indexInUserCreated = _userCreatedWorkouts.indexWhere((sheet) => sheet.id == result.id);
+          if (indexInUserCreated != -1) {
+            _userCreatedWorkouts[indexInUserCreated] = result;
+          } else {
+            // Se a ficha editada era uma ficha padrão (que não está em _userCreatedWorkouts),
+            // a adicionamos a _userCreatedWorkouts e a removemos de _allWorkoutSheets (se for uma cópia).
+            // Em um cenário real com persistência, a lógica seria diferente aqui.
+            // Para esta iteração, vamos simplesmente assumir que edições são de fichas do usuário
+            // ou uma cópia da padrão que agora é "do usuário" para esta sessão.
+            // Para simplificar, se não encontrou em userCreated, adiciona como nova.
+            _userCreatedWorkouts.add(result);
+            // Também, se uma ficha padrão foi editada, ela se torna uma ficha de usuário.
+            // Em uma solução persistente, você a salvaria em um local separado.
+            // Aqui, para a sessão, a removemos da lista _allWorkoutSheets para evitar duplicatas e a tratamos como do usuário.
+            _allWorkoutSheets.removeWhere((sheet) => sheet.id == result.id); // Remove a versão antiga da lista geral.
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ficha "${result.name}" editada com sucesso!', style: AppStyles.smallTextStyle),
+              backgroundColor: AppColors.successColor.withAlpha((255 * 0.7).round()),
+            ),
+          );
+        }
+      });
+      // Recarrega todas as fichas, o que vai incluir as criadas/editadas na sessão atual
+      _loadAllWorkoutSheets();
+      _applyFiltersAndGroupWorkouts(); // Reaplicar filtros para atualizar o estado visual
+    }
+  }
+
+  // NOVO: Helper para verificar se a ficha é uma das fichas padrão (não editável inicialmente)
+  // Isso é uma simplificação. Em um sistema com persistência, você teria uma forma
+  // mais robusta de diferenciar fichas padrão das criadas pelo usuário.
+  // Por enquanto, consideramos padrão as que vêm do JSON inicial e não as que o usuário criou.
+  bool _isDefaultWorkoutSheet(String id) {
+    // Verifica se o ID existe na lista original carregada do JSON (antes de adicionar as criadas pelo usuário)
+    // Para ser mais preciso, você precisaria ter uma lista _defaultWorkoutSheets separada.
+    // Mas para este escopo, a lógica atual é aceitável, pois _userCreatedWorkouts já as diferencia.
+    return !_userCreatedWorkouts.any((sheet) => sheet.id == id);
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -339,6 +431,11 @@ class _WorkoutSheetsScreenState extends State<WorkoutSheetsScreen> {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _navigateToWorkoutSheetForm(), // Chama a tela de criação
+        backgroundColor: AppColors.accentColor,
+        child: const Icon(Icons.add, color: AppColors.textPrimaryColor),
+      ),
     );
   }
 
@@ -380,6 +477,14 @@ class _WorkoutSheetsScreenState extends State<WorkoutSheetsScreen> {
                     Padding(
                       padding: const EdgeInsets.only(left: 8.0),
                       child: Icon(Icons.check_circle, color: AppColors.successColor, size: 24),
+                    ),
+                  // NOVO: Botão de edição para fichas não-padrão (ou todas, se preferir)
+                  // Por enquanto, só permite editar fichas criadas pelo usuário nesta sessão
+                  if (!_isDefaultWorkoutSheet(sheet.id)) // Apenas fichas criadas pelo usuário
+                    IconButton(
+                      icon: const Icon(Icons.edit, color: AppColors.textSecondaryColor),
+                      onPressed: () => _navigateToWorkoutSheetForm(workoutSheet: sheet),
+                      tooltip: 'Editar ficha',
                     ),
                 ],
               ),
@@ -570,6 +675,11 @@ class _WorkoutSheetsScreenState extends State<WorkoutSheetsScreen> {
                                       exercise.setsReps,
                                       style: AppStyles.smallTextStyle.copyWith(color: AppColors.textSecondaryColor),
                                     ),
+                                    if (exercise.load != null && exercise.load!.isNotEmpty) // Exibir a carga
+                                      Text(
+                                        'Carga: ${exercise.load}',
+                                        style: AppStyles.smallTextStyle.copyWith(color: AppColors.textSecondaryColor),
+                                      ),
                                     if (exercise.notes != null && exercise.notes!.isNotEmpty)
                                       Text(
                                         'Notas: ${exercise.notes}',

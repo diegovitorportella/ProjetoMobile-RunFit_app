@@ -8,13 +8,15 @@ class Exercise {
   final String setsReps;
   final String? notes;
   final String? imageUrl; // URL ou path para uma imagem/GIF de demonstração
+  final String? load; // NOVO CAMPO: Para armazenar a carga (ex: "10kg", "5lb", "Peso Corporal")
   bool isCompleted;
 
   Exercise({
     required this.name,
     required this.setsReps,
     this.notes,
-    this.imageUrl, // Adicione ao construtor
+    this.imageUrl,
+    this.load, // Adicione ao construtor
     this.isCompleted = false,
   });
 
@@ -24,6 +26,7 @@ class Exercise {
     String? setsReps,
     String? notes,
     String? imageUrl,
+    String? load, // Adicione ao copyWith
     bool? isCompleted,
   }) {
     return Exercise(
@@ -31,6 +34,7 @@ class Exercise {
       setsReps: setsReps ?? this.setsReps,
       notes: notes ?? this.notes,
       imageUrl: imageUrl ?? this.imageUrl,
+      load: load ?? this.load, // Adicione ao copyWith
       isCompleted: isCompleted ?? this.isCompleted,
     );
   }
@@ -39,7 +43,8 @@ class Exercise {
     'name': name,
     'setsReps': setsReps,
     'notes': notes,
-    'imageUrl': imageUrl, // Adicione ao toJson
+    'imageUrl': imageUrl,
+    'load': load, // Adicione ao toJson
     'isCompleted': isCompleted,
   };
 
@@ -47,7 +52,8 @@ class Exercise {
     name: json['name'],
     setsReps: json['setsReps'],
     notes: json['notes'],
-    imageUrl: json['imageUrl'], // Adicione ao fromJson
+    imageUrl: json['imageUrl'],
+    load: json['load'], // Adicione ao fromJson
     isCompleted: json['isCompleted'] ?? false,
   );
 }
@@ -69,7 +75,7 @@ class WorkoutSheet {
     required this.modality,
     required this.level,
     required this.exercises,
-    this.icon, // Adicione ao construtor
+    this.icon,
     this.isActive = false,
   });
 
@@ -103,7 +109,7 @@ class WorkoutSheet {
     'modality': modality.name,
     'level': level.name,
     'exercises': exercises.map((e) => e.toJson()).toList(),
-    'icon': icon, // Salva o codePoint do ícone
+    'icon': icon,
     'isActive': isActive,
   };
 
@@ -119,7 +125,7 @@ class WorkoutSheet {
       modality: WorkoutModality.values.byName(json['modality']),
       level: WorkoutLevel.values.byName(json['level']),
       exercises: exercisesList,
-      icon: json['icon'], // Carrega o codePoint do ícone
+      icon: json['icon'],
       isActive: json['isActive'] ?? false,
     );
   }

@@ -9,12 +9,11 @@ import 'package:runfit_app/utils/app_colors.dart';
 import 'package:runfit_app/utils/app_styles.dart';
 import 'package:runfit_app/utils/app_constants.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:runfit_app/screens/activity_details_screen.dart'; // Importe a tela de detalhes da atividade
+import 'package:runfit_app/screens/activity_details_screen.dart';
 
-// NOVO: Importe o flutter_map e latlong2
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart'; // NOVO: Adicione este import
+import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 
 
 class ActivityHistoryScreen extends StatefulWidget {
@@ -26,12 +25,46 @@ class ActivityHistoryScreen extends StatefulWidget {
 
 class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   List<ActivityHistoryEntry> _activityHistory = [];
+  List<ActivityHistoryEntry> _filteredActivityHistory = []; // NOVO: Lista filtrada
   bool _isLoading = true;
+
+  // NOVO: Variáveis de estado para os filtros
+  DateTime? _startDateFilter;
+  DateTime? _endDateFilter;
+  String? _selectedModalityFilter; // 'corrida', 'musculacao', 'ambos' ou null (todos)
+  String? _selectedActivityTypeFilter; // 'Avulsa', 'Ficha de Treino' ou null (todos)
+  double? _minDurationFilter;
+  double? _maxDurationFilter;
+  double? _minDistanceFilter;
+  double? _maxDistanceFilter;
+  String? _workoutSheetNameFilter; // Para filtrar por nome de ficha
+
+  // Controladores de texto para campos numéricos de filtro
+  final TextEditingController _minDurationController = TextEditingController();
+  final TextEditingController _maxDurationController = TextEditingController();
+  final TextEditingController _minDistanceController = TextEditingController();
+  final TextEditingController _maxDistanceController = TextEditingController();
+  final TextEditingController _workoutSheetNameController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadActivityHistory();
+    _minDurationController.addListener(_applyFilters);
+    _maxDurationController.addListener(_applyFilters);
+    _minDistanceController.addListener(_applyFilters);
+    _maxDistanceController.addListener(_applyFilters);
+    _workoutSheetNameController.addListener(_applyFilters);
+  }
+
+  @override
+  void dispose() {
+    _minDurationController.dispose();
+    _maxDurationController.dispose();
+    _minDistanceController.dispose();
+    _maxDistanceController.dispose();
+    _workoutSheetNameController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadActivityHistory() async {
@@ -40,17 +73,387 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     setState(() {
       _activityHistory = historyJsonList.map((jsonString) => ActivityHistoryEntry.fromJson(json.decode(jsonString))).toList();
       _activityHistory.sort((a, b) => b.date.compareTo(a.date)); // Ordena do mais recente para o mais antigo
+      _filteredActivityHistory = List.from(_activityHistory); // Inicialmente, filtrado é igual a todo o histórico
       _isLoading = false;
     });
   }
 
-  // --- Métodos de Pie Chart (mantidos iguais) ---
+  // NOVO: Método para aplicar todos os filtros
+  void _applyFilters() {
+    setState(() {
+      _filteredActivityHistory = _activityHistory.where((entry) {
+        bool matches = true;
+
+        // Filtro por data
+        if (_startDateFilter != null) {
+          if (entry.date.isBefore(DateTime(_startDateFilter!.year, _startDateFilter!.month, _startDateFilter!.day))) {
+            matches = false;
+          }
+        }
+        if (matches && _endDateFilter != null) {
+          if (entry.date.isAfter(DateTime(_endDateFilter!.year, _endDateFilter!.month, _endDateFilter!.day, 23, 59, 59))) {
+            matches = false;
+          }
+        }
+
+        // Filtro por modalidade
+        if (matches && _selectedModalityFilter != null && _selectedModalityFilter != 'Todos') {
+          matches = entry.modality == _selectedModalityFilter;
+        }
+
+        // Filtro por tipo de atividade
+        if (matches && _selectedActivityTypeFilter != null && _selectedActivityTypeFilter != 'Todos') {
+          matches = entry.activityType == _selectedActivityTypeFilter;
+        }
+
+        // Filtro por duração
+        _minDurationFilter = double.tryParse(_minDurationController.text);
+        _maxDurationFilter = double.tryParse(_maxDurationController.text);
+        if (matches && _minDurationFilter != null) {
+          if (entry.durationMinutes == null || entry.durationMinutes! < _minDurationFilter!) {
+            matches = false;
+          }
+        }
+        if (matches && _maxDurationFilter != null) {
+          if (entry.durationMinutes == null || entry.durationMinutes! > _maxDurationFilter!) {
+            matches = false;
+          }
+        }
+
+        // Filtro por distância
+        _minDistanceFilter = double.tryParse(_minDistanceController.text);
+        _maxDistanceFilter = double.tryParse(_maxDistanceController.text);
+        if (matches && _minDistanceFilter != null) {
+          if (entry.distanceKm == null || entry.distanceKm! < _minDistanceFilter!) {
+            matches = false;
+          }
+        }
+        if (matches && _maxDistanceFilter != null) {
+          if (entry.distanceKm == null || entry.distanceKm! > _maxDistanceFilter!) {
+            matches = false;
+          }
+        }
+
+        // Filtro por nome da planilha de treino (apenas para tipo "Ficha de Treino")
+        _workoutSheetNameFilter = _workoutSheetNameController.text.trim().toLowerCase();
+        if (matches && _workoutSheetNameFilter != null && _workoutSheetNameFilter!.isNotEmpty) {
+          if (entry.activityType != 'Ficha de Treino' || entry.workoutSheetName == null || !entry.workoutSheetName!.toLowerCase().contains(_workoutSheetNameFilter!)) {
+            matches = false;
+          }
+        }
+
+        return matches;
+      }).toList();
+    });
+  }
+
+  // NOVO: Método para resetar os filtros
+  void _resetFilters() {
+    setState(() {
+      _startDateFilter = null;
+      _endDateFilter = null;
+      _selectedModalityFilter = null;
+      _selectedActivityTypeFilter = null;
+      _minDurationController.clear();
+      _maxDurationController.clear();
+      _minDistanceController.clear();
+      _maxDistanceController.clear();
+      _workoutSheetNameController.clear();
+      _applyFilters(); // Reaplica os filtros para mostrar tudo
+    });
+  }
+
+  // NOVO: Exibe o modal de filtros
+  void _showFilterModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter modalSetState) {
+            return DraggableScrollableSheet(
+              initialChildSize: 0.8,
+              minChildSize: 0.5,
+              maxChildSize: 0.95,
+              expand: false,
+              builder: (_, controller) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.cardColor,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(25.0)),
+                  ),
+                  child: Column(
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 5,
+                          margin: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: AppColors.textSecondaryColor.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(2.5),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          controller: controller,
+                          padding: const EdgeInsets.all(24.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Filtrar Histórico', style: AppStyles.headingStyle),
+                              const SizedBox(height: 24),
+
+                              // Filtro de Data
+                              Text('Período:', style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: () async {
+                                        final DateTime? picked = await showDatePicker(
+                                          context: context,
+                                          initialDate: _startDateFilter ?? DateTime.now(),
+                                          firstDate: DateTime(2020),
+                                          lastDate: DateTime.now(),
+                                          builder: (context, child) {
+                                            return Theme(
+                                              data: Theme.of(context).copyWith(
+                                                colorScheme: ColorScheme.dark(
+                                                  primary: AppColors.accentColor, // Cor de destaque do seletor
+                                                  onPrimary: AppColors.textPrimaryColor, // Cor do texto sobre a cor de destaque
+                                                  surface: AppColors.cardColor, // Cor de fundo do calendário
+                                                  onSurface: AppColors.textPrimaryColor, // Cor do texto no calendário
+                                                ),
+                                                textButtonTheme: TextButtonThemeData(
+                                                  style: TextButton.styleFrom(
+                                                    foregroundColor: AppColors.accentColor, // Cor dos botões "CANCELAR", "OK"
+                                                  ),
+                                                ),
+                                              ),
+                                              child: child!,
+                                            );
+                                          },
+                                        );
+                                        if (picked != null) {
+                                          modalSetState(() {
+                                            _startDateFilter = picked;
+                                          });
+                                          _applyFilters();
+                                        }
+                                      },
+                                      style: AppStyles.buttonStyle.copyWith(
+                                        padding: MaterialStateProperty.all(const EdgeInsets.symmetric(vertical: 12)),
+                                        backgroundColor: MaterialStateProperty.all(AppColors.cardColor),
+                                        side: MaterialStateProperty.all(BorderSide(color: AppColors.borderColor)),
+                                      ),
+                                      child: Text(
+                                        _startDateFilter == null
+                                            ? 'Data Início'
+                                            : DateFormat('dd/MM/yyyy').format(_startDateFilter!),
+                                        style: AppStyles.bodyStyle,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: () async {
+                                        final DateTime? picked = await showDatePicker(
+                                          context: context,
+                                          initialDate: _endDateFilter ?? DateTime.now(),
+                                          firstDate: DateTime(2020),
+                                          lastDate: DateTime.now(),
+                                          builder: (context, child) {
+                                            return Theme(
+                                              data: Theme.of(context).copyWith(
+                                                colorScheme: ColorScheme.dark(
+                                                  primary: AppColors.accentColor,
+                                                  onPrimary: AppColors.textPrimaryColor,
+                                                  surface: AppColors.cardColor,
+                                                  onSurface: AppColors.textPrimaryColor,
+                                                ),
+                                                textButtonTheme: TextButtonThemeData(
+                                                  style: TextButton.styleFrom(
+                                                    foregroundColor: AppColors.accentColor,
+                                                  ),
+                                                ),
+                                              ),
+                                              child: child!,
+                                            );
+                                          },
+                                        );
+                                        if (picked != null) {
+                                          modalSetState(() {
+                                            _endDateFilter = picked;
+                                          });
+                                          _applyFilters();
+                                        }
+                                      },
+                                      style: AppStyles.buttonStyle.copyWith(
+                                        padding: MaterialStateProperty.all(const EdgeInsets.symmetric(vertical: 12)),
+                                        backgroundColor: MaterialStateProperty.all(AppColors.cardColor),
+                                        side: MaterialStateProperty.all(BorderSide(color: AppColors.borderColor)),
+                                      ),
+                                      child: Text(
+                                        _endDateFilter == null
+                                            ? 'Data Fim'
+                                            : DateFormat('dd/MM/yyyy').format(_endDateFilter!),
+                                        style: AppStyles.bodyStyle,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 24),
+
+                              // Filtro por Modalidade
+                              Text('Modalidade:', style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<String>(
+                                value: _selectedModalityFilter,
+                                decoration: AppStyles.inputDecoration,
+                                style: AppStyles.bodyStyle,
+                                dropdownColor: AppColors.cardColor,
+                                items: [
+                                  const DropdownMenuItem<String>(value: 'Todos', child: Text('Todas as Modalidades', style: AppStyles.bodyStyle)),
+                                  ...WorkoutModality.values.map((modality) => DropdownMenuItem(
+                                    value: modality.name,
+                                    child: Text(modality.name.toCapitalized(), style: AppStyles.bodyStyle),
+                                  )).toList(),
+                                ],
+                                onChanged: (value) {
+                                  modalSetState(() {
+                                    _selectedModalityFilter = value;
+                                  });
+                                  _applyFilters();
+                                },
+                              ),
+                              const SizedBox(height: 24),
+
+                              // Filtro por Tipo de Atividade
+                              Text('Tipo de Atividade:', style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<String>(
+                                value: _selectedActivityTypeFilter,
+                                decoration: AppStyles.inputDecoration,
+                                style: AppStyles.bodyStyle,
+                                dropdownColor: AppColors.cardColor,
+                                items: const [
+                                  DropdownMenuItem<String>(value: 'Todos', child: Text('Todos os Tipos', style: AppStyles.bodyStyle)),
+                                  DropdownMenuItem<String>(value: 'Avulsa', child: Text('Avulsa', style: AppStyles.bodyStyle)),
+                                  DropdownMenuItem<String>(value: 'Ficha de Treino', child: Text('Ficha de Treino', style: AppStyles.bodyStyle)),
+                                ],
+                                onChanged: (value) {
+                                  modalSetState(() {
+                                    _selectedActivityTypeFilter = value;
+                                  });
+                                  _applyFilters();
+                                },
+                              ),
+                              const SizedBox(height: 24),
+
+                              // Filtro de Duração
+                              Text('Duração (minutos):', style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _minDurationController,
+                                      keyboardType: TextInputType.number,
+                                      style: AppStyles.bodyStyle,
+                                      decoration: AppStyles.inputDecoration.copyWith(labelText: 'Mínima'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _maxDurationController,
+                                      keyboardType: TextInputType.number,
+                                      style: AppStyles.bodyStyle,
+                                      decoration: AppStyles.inputDecoration.copyWith(labelText: 'Máxima'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 24),
+
+                              // Filtro de Distância (apenas para Corrida ou geral)
+                              Text('Distância (km):', style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _minDistanceController,
+                                      keyboardType: TextInputType.number,
+                                      style: AppStyles.bodyStyle,
+                                      decoration: AppStyles.inputDecoration.copyWith(labelText: 'Mínima'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _maxDistanceController,
+                                      keyboardType: TextInputType.number,
+                                      style: AppStyles.bodyStyle,
+                                      decoration: AppStyles.inputDecoration.copyWith(labelText: 'Máxima'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 24),
+
+                              // Filtro por Nome da Planilha de Treino
+                              Text('Nome da Ficha de Treino:', style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                controller: _workoutSheetNameController,
+                                style: AppStyles.bodyStyle,
+                                decoration: AppStyles.inputDecoration.copyWith(hintText: 'Buscar por nome da ficha'),
+                              ),
+                              const SizedBox(height: 32),
+
+                              Center(
+                                child: ElevatedButton(
+                                  onPressed: () {
+                                    _resetFilters(); // Reseta e fecha o modal
+                                    Navigator.of(context).pop();
+                                  },
+                                  style: AppStyles.buttonStyle.copyWith(
+                                    backgroundColor: MaterialStateProperty.all(AppColors.warningColor),
+                                  ),
+                                  child: Text('Limpar Filtros', style: AppStyles.buttonTextStyle),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+
+  // --- Métodos de Pie Chart (mantidos iguais, mas agora usam _filteredActivityHistory) ---
   List<PieChartSectionData> _getPieChartSections(BuildContext context) {
-    if (_activityHistory.isEmpty) {
+    if (_filteredActivityHistory.isEmpty) {
       return [];
     }
     final Map<String, int> modalityCounts = {};
-    for (var entry in _activityHistory) {
+    for (var entry in _filteredActivityHistory) { // Usa a lista filtrada
       modalityCounts[entry.modality] = (modalityCounts[entry.modality] ?? 0) + 1;
     }
     final List<Color> pieColors = [
@@ -65,7 +468,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     return modalityCounts.entries.map((entry) {
       final String modality = entry.key;
       final int count = entry.value;
-      final double percentage = (count / _activityHistory.length) * 100;
+      final double percentage = (count / _filteredActivityHistory.length) * 100; // Usa a lista filtrada
       String formattedModality = modality.replaceAllMapped(RegExp(r'([A-Z])'), (match) => ' ${match.group(1)}').toTitleCase();
       final color = pieColors[colorIndex % pieColors.length];
       colorIndex++;
@@ -87,11 +490,11 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   }
 
   List<PieChartSectionData> _getDurationPieChartSections(BuildContext context) {
-    if (_activityHistory.isEmpty) {
+    if (_filteredActivityHistory.isEmpty) {
       return [];
     }
     final Map<String, double> modalityDurations = {};
-    for (var entry in _activityHistory) {
+    for (var entry in _filteredActivityHistory) { // Usa a lista filtrada
       if (entry.durationMinutes != null) {
         modalityDurations[entry.modality] = (modalityDurations[entry.modality] ?? 0) + entry.durationMinutes!;
       }
@@ -156,17 +559,40 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Histórico de Atividades', style: AppStyles.titleTextStyle.copyWith(fontSize: 22)),
+        actions: [
+          IconButton( // NOVO: Botão para abrir o modal de filtros
+            icon: const Icon(Icons.filter_list),
+            onPressed: _showFilterModal,
+            tooltip: 'Filtrar Histórico',
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _activityHistory.isEmpty
+          : _filteredActivityHistory.isEmpty // Usa a lista filtrada para verificar se está vazia
           ? Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
-          child: Text(
-            'Nenhuma atividade registrada ainda. Que tal começar a treinar?',
-            style: AppStyles.bodyStyle.copyWith(color: AppColors.textSecondaryColor),
-            textAlign: TextAlign.center,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                _activityHistory.isEmpty
+                    ? 'Nenhuma atividade registrada ainda. Que tal começar a treinar?'
+                    : 'Nenhum resultado encontrado para os filtros aplicados.', // Mensagem para filtros
+                style: AppStyles.bodyStyle.copyWith(color: AppColors.textSecondaryColor),
+                textAlign: TextAlign.center,
+              ),
+              if (_activityHistory.isNotEmpty) // Se há atividades, mas nenhuma com filtro
+                Padding(
+                  padding: const EdgeInsets.only(top: 16.0),
+                  child: ElevatedButton(
+                    onPressed: _resetFilters,
+                    style: AppStyles.buttonStyle,
+                    child: Text('Limpar Filtros', style: AppStyles.buttonTextStyle),
+                  ),
+                ),
+            ],
           ),
         ),
       )
@@ -175,7 +601,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // GRÁFICO 1: Distribuição de Atividades por Modalidade
+            // GRÁFICO 1: Distribuição de Atividades por Modalidade (usa _filteredActivityHistory)
             if (pieChartSections.isNotEmpty)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,7 +635,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                 ],
               ),
 
-            // GRÁFICO 2: Duração Total de Atividades por Modalidade
+            // GRÁFICO 2: Duração Total de Atividades por Modalidade (usa _filteredActivityHistory)
             if (durationPieChartSections.isNotEmpty)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,9 +677,9 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
             ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: _activityHistory.length,
+              itemCount: _filteredActivityHistory.length, // Usa a lista filtrada
               itemBuilder: (context, index) {
-                final entry = _activityHistory[index];
+                final entry = _filteredActivityHistory[index]; // Usa a lista filtrada
                 // Condição para exibir o mapa: Modalidade Corrida e ter coordenadas
                 final bool showMap = entry.modality == WorkoutModality.corrida.name &&
                     entry.pathCoordinates != null &&
@@ -310,7 +736,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                         MaterialPageRoute(
                           builder: (context) => ActivityDetailsScreen(
                             activity: entry,
-                            modality: entry.modality, // ADICIONADO: Passando a modalidade
+                            modality: entry.modality,
                           ),
                         ),
                       );
@@ -341,7 +767,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                             ),
                           if (entry.durationMinutes != null)
                             Text(
-                              'Duração: ${_formatDuration(entry.durationMinutes)}', // AQUI ESTÁ A ALTERAÇÃO USANDO O NOVO MÉTODO
+                              'Duração: ${_formatDuration(entry.durationMinutes)}',
                               style: AppStyles.bodyStyle,
                             ),
                           if (entry.distanceKm != null)
@@ -349,6 +775,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                               'Distância: ${entry.distanceKm?.toStringAsFixed(2)} km',
                               style: AppStyles.bodyStyle,
                             ),
+                          if (entry.averagePace != null)
+                            Text('Pace Médio: ${entry.averagePace}', style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold)),
                           if (entry.notes != null && entry.notes!.isNotEmpty)
                             Text(
                               'Notas: ${entry.notes}',
@@ -357,7 +785,31 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
 
-                          // NOVO: Widget do Mini-Mapa com FlutterMap
+                          // Exibir exercícios detalhados para Musculação
+                          if (entry.modality == WorkoutModality.musculacao.name && entry.loggedExercises != null && entry.loggedExercises!.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              'Exercícios:',
+                              style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: entry.loggedExercises!.length,
+                              itemBuilder: (context, exerciseIndex) {
+                                final exercise = entry.loggedExercises![exerciseIndex];
+                                return Padding(
+                                  padding: const EdgeInsets.only(left: 8.0, top: 4.0),
+                                  child: Text(
+                                    '• ${exercise.name}: ${exercise.sets}x${exercise.reps} ${exercise.load != null && exercise.load!.isNotEmpty ? '(${exercise.load})' : ''}',
+                                    style: AppStyles.smallTextStyle.copyWith(color: AppColors.textSecondaryColor),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+
+                          // Widget do Mini-Mapa com FlutterMap
                           if (showMap && mapCenter != null) ...[
                             const SizedBox(height: 16),
                             Text(
@@ -365,36 +817,34 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                               style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 8),
-                            ClipRRect( // Borda arredondada para o mapa
+                            ClipRRect(
                               borderRadius: BorderRadius.circular(8.0),
-                              child: SizedBox( // Usar SizedBox em vez de Container para evitar warnings de layout
-                                height: 150, // Altura fixa para o mini-mapa
-                                width: double.infinity, // Largura total
+                              child: SizedBox(
+                                height: 150,
+                                width: double.infinity,
                                 child: FlutterMap(
                                   options: MapOptions(
                                     center: mapCenter!,
-                                    zoom: 14, // Zoom inicial para o mini-mapa
-                                    // Desabilita interação para o mini-mapa
+                                    zoom: 14,
                                     interactionOptions: const InteractionOptions(
-                                      flags: InteractiveFlag.none, // Desabilita todos os gestos
+                                      flags: InteractiveFlag.none,
                                     ),
                                   ),
                                   children: [
                                     TileLayer(
                                       urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                                      userAgentPackageName: 'com.example.runfit_app', // Substitua pelo seu ID de pacote
-                                      tileProvider: CancellableNetworkTileProvider(), // ADICIONADO: Provedor de tiles otimizado
+                                      userAgentPackageName: 'com.example.runfit_app',
+                                      tileProvider: CancellableNetworkTileProvider(),
                                     ),
                                     PolylineLayer(
                                       polylines: [
                                         Polyline(
                                           points: pathPoints,
-                                          color: AppColors.accentColor, // Sua cor de destaque
-                                          strokeWidth: 4.0, // Largura menor para o mini-mapa
+                                          color: AppColors.accentColor,
+                                          strokeWidth: 4.0,
                                         ),
                                       ],
                                     ),
-                                    // Adicionar marcadores de início e fim
                                     MarkerLayer(
                                       markers: mapMarkers,
                                     ),

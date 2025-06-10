@@ -5,16 +5,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:convert';
 
-import 'package:runfit_app/utils/app_colors.dart';           // CORES DO PROJETO
-import 'package:runfit_app/utils/app_styles.dart';           // ESTILOS DO PROJETO
-import 'package:runfit_app/utils/app_constants.dart';        // CONSTANTES DO PROJETO
-import 'package:runfit_app/data/models/activity_history_entry.dart'; // MODELO DO PROJETO
-import 'package:runfit_app/services/achievement_service.dart';     // SERVIÇO DE CONQUISTAS
+import 'package:runfit_app/utils/app_colors.dart';
+import 'package:runfit_app/utils/app_styles.dart';
+import 'package:runfit_app/utils/app_constants.dart';
+import 'package:runfit_app/data/models/activity_history_entry.dart';
+import 'package:runfit_app/services/achievement_service.dart';
+import 'package:runfit_app/data/models/achievement.dart'; // Importar modelo de Conquista
+import 'package:runfit_app/services/goal_service.dart'; // NOVO: Importar GoalService
+import 'package:runfit_app/data/models/goal.dart'; // NOVO: Importar modelo Goal
 
 class ActivityLogScreen extends StatefulWidget {
-  final String? selectedModality; // Recebe a modalidade (ex: musculacao)
-  // Removido activeWorkoutSheet, pois esta tela é para atividades avulsas manuais.
-  // Se precisar logar conclusão de ficha, a lógica da HomeScreen original seria mantida/adaptada.
+  final String? selectedModality;
 
   const ActivityLogScreen({
     super.key,
@@ -29,61 +30,256 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
   final _formKey = GlobalKey<FormState>();
   late String _currentModality;
   final TextEditingController _durationController = TextEditingController();
-  final TextEditingController _distanceController = TextEditingController(); // Mantido caso outra modalidade manual precise
   final TextEditingController _notesController = TextEditingController();
 
+  List<LoggedExercise> _loggedExercises = [];
+
   final Uuid _uuid = const Uuid();
-  final AchievementService _achievementService = AchievementService(); // Instância do serviço
+  final AchievementService _achievementService = AchievementService();
+  final GoalService _goalService = GoalService(); // NOVO: Instanciar GoalService
 
   @override
   void initState() {
     super.initState();
-    // Define a modalidade baseada no que foi passado, ou um padrão.
-    // Para este fluxo, widget.selectedModality sempre deve ser 'musculacao'.
     _currentModality = widget.selectedModality ?? WorkoutModality.musculacao.name;
   }
 
   @override
   void dispose() {
     _durationController.dispose();
-    _distanceController.dispose();
     _notesController.dispose();
     super.dispose();
   }
 
+  void _addLoggedExercise() {
+    setState(() {
+      _loggedExercises.add(LoggedExercise(name: '', sets: '', reps: ''));
+    });
+  }
+
+  void _removeLoggedExercise(int index) {
+    setState(() {
+      _loggedExercises.removeAt(index);
+    });
+  }
+
+  Future<void> _showExerciseFormModal({LoggedExercise? exercise, int? index}) async {
+    final TextEditingController nameController = TextEditingController(text: exercise?.name);
+    final TextEditingController setsController = TextEditingController(text: exercise?.sets);
+    final TextEditingController repsController = TextEditingController(text: exercise?.reps);
+    final TextEditingController loadController = TextEditingController(text: exercise?.load);
+    final TextEditingController notesController = TextEditingController(text: exercise?.notes);
+
+    final _exerciseFormKey = GlobalKey<FormState>();
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.9,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (_, controller) {
+            return Container(
+              decoration: BoxDecoration(
+                color: AppColors.cardColor,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(25.0)),
+              ),
+              child: Column(
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 5,
+                      margin: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.textSecondaryColor.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(2.5),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: controller,
+                      padding: const EdgeInsets.all(24.0),
+                      child: Form(
+                        key: _exerciseFormKey,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              exercise == null ? 'Registrar Exercício' : 'Editar Exercício',
+                              style: AppStyles.headingStyle,
+                            ),
+                            const SizedBox(height: 24),
+                            TextFormField(
+                              controller: nameController,
+                              style: AppStyles.bodyStyle,
+                              decoration: AppStyles.inputDecoration.copyWith(labelText: 'Nome do Exercício'),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Por favor, digite o nome do exercício.';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: setsController,
+                                    style: AppStyles.bodyStyle,
+                                    keyboardType: TextInputType.number,
+                                    decoration: AppStyles.inputDecoration.copyWith(labelText: 'Séries'),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Séries?';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: repsController,
+                                    style: AppStyles.bodyStyle,
+                                    keyboardType: TextInputType.text,
+                                    decoration: AppStyles.inputDecoration.copyWith(labelText: 'Repetições'),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Reps?';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: loadController,
+                              style: AppStyles.bodyStyle,
+                              decoration: AppStyles.inputDecoration.copyWith(
+                                labelText: 'Carga (opcional)',
+                                hintText: 'Ex: 20kg, Peso Corporal',
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: notesController,
+                              style: AppStyles.bodyStyle,
+                              decoration: AppStyles.inputDecoration.copyWith(labelText: 'Notas (opcional)'),
+                              maxLines: 3,
+                            ),
+                            const SizedBox(height: 24),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  child: Text('Cancelar', style: AppStyles.buttonTextStyle.copyWith(color: AppColors.textSecondaryColor)),
+                                ),
+                                const SizedBox(width: 10),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    if (_exerciseFormKey.currentState!.validate()) {
+                                      final newLoggedExercise = LoggedExercise(
+                                        name: nameController.text.trim(),
+                                        sets: setsController.text.trim(),
+                                        reps: repsController.text.trim(),
+                                        load: loadController.text.trim().isEmpty ? null : loadController.text.trim(),
+                                        notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
+                                      );
+                                      Navigator.of(context).pop(newLoggedExercise);
+                                    }
+                                  },
+                                  style: AppStyles.buttonStyle,
+                                  child: Text(exercise == null ? 'Adicionar' : 'Salvar', style: AppStyles.buttonTextStyle),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    ).then((result) {
+      if (result != null && result is LoggedExercise) {
+        setState(() {
+          if (index != null) {
+            _loggedExercises[index] = result;
+          } else {
+            _loggedExercises.add(result);
+          }
+        });
+      }
+    });
+  }
+
   Future<void> _saveActivity() async {
     if (_formKey.currentState!.validate()) {
+      if (_currentModality == WorkoutModality.musculacao.name && _loggedExercises.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Por favor, adicione pelo menos um exercício de musculação.', style: AppStyles.smallTextStyle),
+            backgroundColor: AppColors.errorColor,
+          ),
+        );
+        return;
+      }
+
       final prefs = await SharedPreferences.getInstance();
-      // Usar a chave de SharedPreferencesKeys do app_constants.dart
       List<String> historyJsonList = prefs.getStringList(SharedPreferencesKeys.activityHistory) ?? [];
 
       final newEntry = ActivityHistoryEntry(
         id: _uuid.v4(),
         date: DateTime.now(),
-        modality: _currentModality, // Será 'musculacao' neste caso
-        activityType: 'Avulsa', // Sempre 'Avulsa' para esta tela
+        modality: _currentModality,
+        activityType: 'Avulsa',
         durationMinutes: double.tryParse(_durationController.text),
-        // DistanceKm será null ou não preenchido para musculação,
-        // mas o campo pode ser útil se esta tela for reutilizada para outras atividades manuais.
-        distanceKm: _currentModality == WorkoutModality.corrida.name // Exemplo, não aplicável para musculacao
-            ? double.tryParse(_distanceController.text)
-            : null,
+        distanceKm: null,
         notes: _notesController.text.isEmpty ? null : _notesController.text,
-        // Campos de GPS não são preenchidos aqui
         latitude: null,
         longitude: null,
         pathCoordinates: null,
+        averagePace: null,
+        loggedExercises: _currentModality == WorkoutModality.musculacao.name ? _loggedExercises : null,
       );
 
       historyJsonList.add(json.encode(newEntry.toJson()));
       await prefs.setStringList(SharedPreferencesKeys.activityHistory, historyJsonList);
 
-      // NOVO: Atualizar contador de treinos concluídos esta semana
       final currentCompleted = prefs.getInt(SharedPreferencesKeys.completedWorkoutsThisWeek) ?? 0;
       await prefs.setInt(SharedPreferencesKeys.completedWorkoutsThisWeek, currentCompleted + 1);
 
-      // Notificar o serviço de conquistas sobre a conclusão da atividade
-      await _achievementService.notifyWorkoutCompleted(_currentModality);
+      final unlockedAch = await _achievementService.notifyWorkoutCompleted(_currentModality);
+      if (unlockedAch != null && mounted) {
+        _showAchievementUnlockedDialog(unlockedAch);
+      }
+
+      // NOVO: Atualizar metas ao registrar uma atividade avulsa
+      final newlyCompletedGoals = await _goalService.updateGoalsProgress(
+        modality: _currentModality,
+        durationMinutes: double.tryParse(_durationController.text),
+        // Se for musculação, você pode adicionar a lógica para passar a carga total aqui
+        // Por enquanto, não estamos somando cargas individuais de exercícios na meta service
+      );
+      if (mounted) {
+        for (var goal in newlyCompletedGoals) {
+          _showGoalCompletedDialog(goal);
+        }
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -92,23 +288,96 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
             backgroundColor: AppColors.successColor.withAlpha((255 * 0.7).round()),
           ),
         );
-        // Pop duas vezes para voltar para a tela antes da ActivitySelectionScreen (provavelmente a HomeScreen)
         int count = 0;
         Navigator.of(context).popUntil((_) => count++ >= 2);
       }
     }
   }
 
+  void _showAchievementUnlockedDialog(Achievement achievement) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: AppColors.cardColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15.0)),
+          title: Row(
+            children: [
+              Icon(achievement.icon, color: AppColors.successColor, size: 30),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Conquista Desbloqueada!', style: AppStyles.headingStyle.copyWith(color: AppColors.successColor)),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(achievement.title, style: AppStyles.titleTextStyle.copyWith(fontSize: 22, color: AppColors.textPrimaryColor)),
+              const SizedBox(height: 8),
+              Text(achievement.description, style: AppStyles.bodyStyle.copyWith(color: AppColors.textSecondaryColor)),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Entendi', style: AppStyles.buttonTextStyle.copyWith(color: AppColors.accentColor)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // NOVO MÉTODO: Exibe um diálogo de meta concluída
+  void _showGoalCompletedDialog(Goal goal) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: AppColors.cardColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15.0)),
+          title: Row(
+            children: [
+              Icon(Icons.flag_outlined, color: AppColors.successColor, size: 30),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Meta Concluída!', style: AppStyles.headingStyle.copyWith(color: AppColors.successColor)),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(goal.name, style: AppStyles.titleTextStyle.copyWith(fontSize: 22, color: AppColors.textPrimaryColor)),
+              const SizedBox(height: 8),
+              Text('Parabéns! Você alcançou sua meta de ${goal.targetValue.toStringAsFixed(goal.type == GoalType.distance || goal.type == GoalType.weight ? 1 : 0)} ${goal.unit.name.toLowerCase()}.', style: AppStyles.bodyStyle.copyWith(color: AppColors.textSecondaryColor)),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Uhuul!', style: AppStyles.buttonTextStyle.copyWith(color: AppColors.accentColor)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // O campo de distância não é relevante para musculação neste fluxo.
-    // Poderia ser condicionalmente mostrado se esta tela fosse mais genérica.
-    // final bool showDistanceField = _currentModality == WorkoutModality.corrida.name;
-
+    // ... (restante do método build, não precisa ser alterado aqui)
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Registrar ${_currentModality.toCapitalized()}', // Título dinâmico
+          'Registrar ${_currentModality.toCapitalized()}',
           style: AppStyles.titleTextStyle.copyWith(fontSize: 22),
         ),
       ),
@@ -124,48 +393,85 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
                 style: AppStyles.headingStyle,
               ),
               const SizedBox(height: 24),
-              // A modalidade é definida pela seleção anterior, não precisa de Dropdown aqui.
               Text('Modalidade: ${_currentModality.toCapitalized()}', style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
+
+              if (_currentModality == WorkoutModality.musculacao.name) ...[
+                Text(
+                  'Exercícios Realizados:',
+                  style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _loggedExercises.length,
+                  itemBuilder: (context, index) {
+                    final exercise = _loggedExercises[index];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      color: AppColors.cardColor.withOpacity(0.7),
+                      child: ListTile(
+                        title: Text(exercise.name.isEmpty ? 'Exercício sem nome' : exercise.name, style: AppStyles.bodyStyle),
+                        subtitle: Text(
+                          'Séries: ${exercise.sets}, Repetições: ${exercise.reps} ${exercise.load != null && exercise.load!.isNotEmpty ? '(Carga: ${exercise.load})' : ''}',
+                          style: AppStyles.smallTextStyle.copyWith(color: AppColors.textSecondaryColor),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: AppColors.textPrimaryColor),
+                              onPressed: () => _showExerciseFormModal(exercise: exercise, index: index),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: AppColors.errorColor),
+                              onPressed: () => _removeLoggedExercise(index),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                Center(
+                  child: ElevatedButton.icon(
+                    onPressed: _addLoggedExercise,
+                    icon: const Icon(Icons.add, color: AppColors.primaryColor),
+                    label: Text('Adicionar Exercício', style: AppStyles.buttonTextStyle.copyWith(color: AppColors.primaryColor)),
+                    style: AppStyles.buttonStyle.copyWith(
+                      backgroundColor: MaterialStateProperty.all(AppColors.successColor),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               TextFormField(
                 controller: _durationController,
                 keyboardType: TextInputType.number,
-                // Usar InputDecoration do AppStyles global
                 decoration: AppStyles.inputDecoration.copyWith(
-                  labelText: 'Duração (minutos)',
-                  hintText: 'Ex: 45',
+                  labelText: 'Duração total (minutos)',
+                  hintText: 'Ex: 60',
                 ),
                 style: AppStyles.bodyStyle,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Por favor, digite a duração';
+                    return 'Por favor, digite a duração.';
                   }
                   if (double.tryParse(value) == null || double.parse(value)! <= 0) {
-                    return 'Duração inválida';
+                    return 'Duração inválida.';
                   }
                   return null;
                 },
               ),
               const SizedBox(height: 16),
-              // O campo de distância pode ser omitido para musculação
-              // if (showDistanceField) ...[
-              //   TextFormField(
-              //     controller: _distanceController,
-              //     keyboardType: TextInputType.number,
-              //     decoration: AppStyles.inputDecoration.copyWith(
-              //       labelText: 'Distância (km, opcional)',
-              //       hintText: 'Ex: 5.5',
-              //     ),
-              //     style: AppStyles.bodyStyle,
-              //   ),
-              //   const SizedBox(height: 16),
-              // ],
               TextFormField(
                 controller: _notesController,
                 maxLines: 3,
                 decoration: AppStyles.inputDecoration.copyWith(
-                  labelText: 'Notas (opcional)',
-                  hintText: 'Adicione observações sobre o treino',
+                  labelText: 'Notas gerais (opcional)',
+                  hintText: 'Adicione observações sobre o treino completo',
                 ),
                 style: AppStyles.bodyStyle,
               ),
