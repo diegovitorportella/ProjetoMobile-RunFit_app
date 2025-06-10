@@ -1,0 +1,309 @@
+[
+  {
+    "id": "ficha_musc_iniciante_001",
+    "name": "Força Total - Iniciante",
+    "description": "Ficha básica de musculação para quem está começando, focada em movimentos compostos e adaptação.",
+    "modality": "musculacao",
+    "level": "iniciante",
+    "icon": 57476,
+    "exercises": [
+      {
+        "name": "Agachamento Livre",
+        "setsReps": "3 séries x 10-12 repetições",
+        "notes": "Mantenha a postura, joelhos para fora. Descanso: 60s",
+        "imageUrl": "images/AgachamentoLivre.webp",
+        "isCompleted": false
+      },
+      {
+        "name": "Supino Reto com Halteres",
+        "setsReps": "3 séries x 8-10 repetições",
+        "notes": "Controle a descida e a subida. Descanso: 90s",
+        "imageUrl": "images/SupinoReto.webp",
+        "isCompleted": false
+      },
+      {
+        "name": "Remada Curvada com Barra",
+        "setsReps": "3 séries x 10-12 repetições",
+        "notes": "Mantenha as costas retas, puxe em direção ao umbigo. Descanso: 75s",
+        "imageUrl": "images/RemadaCurvada.webp",
+        "isCompleted": false
+      },
+      {
+        "name": "Desenvolvimento com Halteres (Ombros)",
+        "setsReps": "3 séries x 10-12 repetições",
+        "notes": "Não trave os cotovelos no topo. Descanso: 60s",
+        "imageUrl": "images/Desenvolvimento.webp",
+        "isCompleted": false
+      },
+      {
+        "name": "Prancha",
+        "setsReps": "3 séries x 30-45 segundos",
+        "notes": "Mantenha o corpo reto, contraia o abdômen. Descanso: 45s",
+        "imageUrl": "images/Prancha.jpg",
+        "isCompleted": false
+      }
+    ]
+  },
+  {
+    "id": "ficha_corrida_iniciante_001",
+    "name": "Primeiros 5K - Iniciante",
+    "description": "Um plano de corrida progressivo para iniciantes que buscam completar uma prova de 5km.",
+    "modality": "corrida",
+    "level": "iniciante",
+    "icon": 57448,
+    "exercises": [
+      {
+        "name": "Caminhada Leve (Aquecimento)",
+        "setsReps": "10 minutos",
+        "notes": "Ritmo moderado para aquecer os músculos.",
+        "imageUrl": null,
+        "isCompleted": false
+      },
+      {
+        "name": "Corrida Curta",
+        "setsReps": "20 minutos",
+        "notes": "Mantenha um ritmo confortável onde consiga conversar. Se necessário, intercale com caminhada.",
+        "imageUrl": null,
+        "isCompleted": false
+      },
+      {
+        "name": "Alongamento Pós-corrida",
+        "setsReps": "5 minutos",
+        "notes": "Foque nos alongamentos de pernas e panturrilhas.",
+        "imageUrl": null,
+        "isCompleted": false
+      }
+    ]
+  },
+  {
+    "id": "ficha_musc_intermediario_001",
+    "name": "Hipertrofia - Intermediário",
+    "description": "Ficha de treino avançada para ganho de massa muscular, com foco em divisão de grupos musculares.",
+    "modality": "musculacao",
+    "level": "intermediario",
+    "icon": 58766,
+    "exercises": [
+      {
+        "name": "Supino Inclinado com Barra",
+        "setsReps": "4 séries x 8-10 repetições",
+        "notes": "Foco na porção superior do peito. Descanso: 90s",
+        "imageUrl": "images/SupinoInclinado.webp",
+        "isCompleted": false
+      },
+      {
+        "name": "Crucifixo com Halteres no Banco Reto",
+        "setsReps": "3 séries x 12-15 repetições",
+        "notes": "Sinta o alongamento no peito. Descanso: 60s",
+        "imageUrl": "images/Crucifixo.webp",
+        "isCompleted": false
+      },
+      {
+        "name": "Remada Cavalinho",
+        "setsReps": "4 séries x 8-10 repetições",
+        "notes": "Puxe o peso em direção ao abdômen inferior. Descanso: 90s",
+        "imageUrl": "images/RemadaCavalinho.webp",
+        "isCompleted": false
+      },
+      {
+        "name": "Puxada Frontal na Polia",
+        "setsReps": "3 séries x 10-12 repetições",
+        "notes": "Sinta a contração nas costas. Descanso: 75s",
+        "imageUrl": "images/Puxadafrontal.jpg",
+        "isCompleted": false
+      },
+      {
+        "name": "Leg Press",
+        "setsReps": "4 séries x 10-12 repetições",
+        "notes": "Não trave os joelhos no final do movimento. Descanso: 90s",
+        "imageUrl": "images/LegPress.webp",
+        "isCompleted": false
+      }
+    ]
+  },
+  {
+    "id": "ficha_corrida_intermediario_001",
+    "name": "Ritmo e Distância - Intermediário",
+    "description": "Ficha para corredores intermediários que querem melhorar pace e aumentar distâncias.",
+    "modality": "corrida",
+    "level": "intermediario",
+    "icon": 57448,
+    "exercises": [
+      {
+        "name": "Aquecimento Dinâmico",
+        "setsReps": "5 minutos",
+        "notes": "Inclua rotações de braços, joelhos altos e calcanhares nos glúteos.",
+        "imageUrl": null,
+        "isCompleted": false
+      },
+      {
+        "name": "Treino Intervalado (TI)",
+        "setsReps": "30 minutos",
+        "notes": "5 min aquecimento, 6x (2 min corrida rápida + 3 min trote), 5 min desaceleração.",
+        "imageUrl": null,
+        "isCompleted": false
+      },
+      {
+        "name": "Corrida Longa",
+        "setsReps": "45 minutos",
+        "notes": "Ritmo constante e confortável para distância.",
+        "imageUrl": null,
+        "isCompleted": false
+      }
+    ]
+  },
+  {
+    "id": "ficha_ambos_iniciante_001",
+    "name": "Híbrido para Iniciantes",
+    "description": "Combinação de treinos de força e cardio para quem quer um condicionamento completo.",
+    "modality": "ambos",
+    "level": "iniciante",
+    "icon": 58654,
+    "exercises": [
+      {
+        "name": "Caminhada Rápida",
+        "setsReps": "20 minutos",
+        "notes": "Mantenha um ritmo que eleve a frequência cardíaca.",
+        "imageUrl": null,
+        "isCompleted": false
+      },
+      {
+        "name": "Flexão de Braço (joelhos no chão)",
+        "setsReps": "3 séries x 8-10 repetições",
+        "notes": "Mantenha o corpo alinhado. Descanso: 60s",
+        "imageUrl": "images/Flexao.jpg",
+        "isCompleted": false
+      },
+      {
+        "name": "Remada Invertida (com banco ou TRX)",
+        "setsReps": "3 séries x 10-12 repetições",
+        "notes": "Puxe o peito em direção à barra/alça. Descanso: 60s",
+        "imageUrl": "images/RemadaInvertida.jpg",
+        "isCompleted": false
+      }
+    ]
+  },
+  {
+    "id": "ficha_musc_avancado_001",
+    "name": "Força Máxima e Volume - Avançado",
+    "description": "Programa intenso para atletas avançados, focando em levantamento de cargas e volume de treino.",
+    "modality": "musculacao",
+    "level": "avancado",
+    "icon": 58766,
+    "exercises": [
+      {
+        "name": "Levantamento Terra",
+        "setsReps": "5 séries x 5 repetições (Pirâmide)",
+        "notes": "Aquecimento progressivo, cargas elevadas. Descanso: 120s",
+        "imageUrl": "images/LevantamentoTerra.webp",
+        "isCompleted": false
+      },
+      {
+        "name": "Agachamento Frontal",
+        "setsReps": "4 séries x 6-8 repetições",
+        "notes": "Cuidado com a postura e a mobilidade. Descanso: 90s",
+        "imageUrl": "images/AgachamentoFrontal.webp",
+        "isCompleted": false
+      },
+      {
+        "name": "Remada T-Bar",
+        "setsReps": "4 séries x 8-10 repetições",
+        "notes": "Foco na contração das costas. Descanso: 90s",
+        "imageUrl": "images/RemadaT.webp",
+        "isCompleted": false
+      }
+    ]
+  },
+  {
+    "id": "ficha_corrida_avancado_001",
+    "name": "Maratona 10K - Avançado",
+    "description": "Treinamento especializado para corredores avançados visando distâncias maiores e performance.",
+    "modality": "corrida",
+    "level": "avancado",
+    "icon": 57448,
+    "exercises": [
+      {
+        "name": "Treino de Tempo (Tempo Run)",
+        "setsReps": "40 minutos",
+        "notes": "10 min aquecimento, 20 min ritmo forte, 10 min desaceleração.",
+        "imageUrl": null,
+        "isCompleted": false
+      },
+      {
+        "name": "Fartlek",
+        "setsReps": "45 minutos",
+        "notes": "Variações de velocidade e ritmo em terreno misto.",
+        "imageUrl": null,
+        "isCompleted": false
+      },
+      {
+        "name": "Longão Progressivo",
+        "setsReps": "60 minutos",
+        "notes": "Aumente o ritmo a cada 15 minutos.",
+        "imageUrl": null,
+        "isCompleted": false
+      }
+    ]
+  },
+  {
+    "id": "ficha_ambos_intermediario_001",
+    "name": "Condicionamento Híbrido - Intermediário",
+    "description": "Programa que mescla treinos de força funcional com sessões de cardio de intensidade moderada/alta.",
+    "modality": "ambos",
+    "level": "intermediario",
+    "icon": 58654,
+    "exercises": [
+      {
+        "name": "Circuito de Força (3 rodadas)",
+        "setsReps": "40 minutos",
+        "notes": "Burpees (10x), Flexões (12x), Agachamento com Salto (15x), Prancha (45s). 60s de descanso entre as rodadas.",
+        "imageUrl": "images/CircuitoDeForca.jpg",
+        "isCompleted": false
+      },
+      {
+        "name": "Corrida Contínua (ritmo moderado)",
+        "setsReps": "30 minutos",
+        "notes": "Mantenha um ritmo constante, mas desafiador.",
+        "imageUrl": null,
+        "isCompleted": false
+      },
+      {
+        "name": "Sprints na Esteira/Rua",
+        "setsReps": "15 minutos",
+        "notes": "5x (30s sprint máximo + 90s caminhada/trote).",
+        "imageUrl": null,
+        "isCompleted": false
+      }
+    ]
+  },
+  {
+    "id": "ficha_ambos_avancado_001",
+    "name": "Desafio Híbrido - Avançado",
+    "description": "Treinos de alta intensidade que combinam força explosiva, resistência e condicionamento metabólico.",
+    "modality": "ambos",
+    "level": "avancado",
+    "icon": 58654,
+    "exercises": [
+      {
+        "name": "CrossFit WOD (Exemplo)",
+        "setsReps": "AMRAP 20 min",
+        "notes": "15 Kettlebell Swings, 10 Pull-ups, 5 Handstand Push-ups. O máximo de rodadas possível em 20 min.",
+        "imageUrl": "images/CircuitoWod.jpg",
+        "isCompleted": false
+      },
+      {
+        "name": "Corrida em Subida (Hill Sprints)",
+        "setsReps": "20 minutos",
+        "notes": "5x (Subida máxima de 60-90s + Descida trote).",
+        "imageUrl": null,
+        "isCompleted": false
+      },
+      {
+        "name": "Remada no Remo Ergômetro",
+        "setsReps": "500m x 5",
+        "notes": "Ritmo intenso, 2 min de descanso entre as séries. Foco na potência.",
+        "imageUrl": "images/Simulador_Remo.jpg",
+        "isCompleted": false
+      }
+    ]
+  }
+]

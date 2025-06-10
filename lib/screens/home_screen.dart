@@ -1,0 +1,481 @@
+// lib/screens/home_screen.dart
+
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:runfit_app/data/models/workout_sheet.dart';
+import 'package:runfit_app/utils/app_colors.dart';
+import 'package:runfit_app/utils/app_styles.dart';
+import 'package:runfit_app/utils/app_constants.dart';
+import 'package:runfit_app/screens/activity_log_screen.dart';
+import 'package:runfit_app/data/models/activity_history_entry.dart';
+import 'package:uuid/uuid.dart';
+import 'package:runfit_app/screens/activity_history_screen.dart';
+import 'package:runfit_app/services/achievement_service.dart';
+import 'package:runfit_app/screens/profile_screen.dart';
+import 'package:runfit_app/screens/achievements_screen.dart';
+import 'package:runfit_app/screens/activity_selection_screen.dart';
+
+class HomeScreen extends StatefulWidget {
+  final VoidCallback? onNavigateToWorkoutSheets;
+
+  const HomeScreen({super.key, this.onNavigateToWorkoutSheets});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  String _userName = '';
+  String _userModality = 'N/A'; // Mantido para exibição no perfil, mas não para o registro da ficha
+  String _userLevel = 'N/A';
+  String _userFrequency = 'N/A';
+  int _completedWorkoutsThisWeek = 0;
+  int _targetWorkoutsThisWeek = 0;
+  WorkoutSheet? _activeWorkoutSheet;
+  final Uuid _uuid = const Uuid();
+  final AchievementService _achievementService = AchievementService();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserPreferences();
+    _loadActiveWorkoutSheet();
+    _resetWeeklyCountersIfNeeded();
+  }
+
+  Future<void> _loadUserPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _userName = prefs.getString(SharedPreferencesKeys.userName) ?? 'Usuário';
+      _userModality = prefs.getString(SharedPreferencesKeys.userModality) ?? 'N/A';
+      _userLevel = prefs.getString(SharedPreferencesKeys.userLevel) ?? 'N/A';
+      String? freq = prefs.getString(SharedPreferencesKeys.userFrequency);
+      if (freq != null) {
+        if (freq == WorkoutFrequency.duasVezesPorSemana.name) {
+          _userFrequency = '2x por semana';
+        } else if (freq == WorkoutFrequency.tresVezesPorSemana.name) {
+          _userFrequency = '3x por semana';
+        } else if (freq == WorkoutFrequency.cincoVezesPorSemana.name) {
+          _userFrequency = '5x por semana';
+        } else {
+          _userFrequency = 'N/A';
+        }
+      } else {
+        _userFrequency = 'N/A';
+      }
+
+      _completedWorkoutsThisWeek = prefs.getInt(SharedPreferencesKeys.completedWorkoutsThisWeek) ?? 0;
+      if (freq == WorkoutFrequency.duasVezesPorSemana.name) {
+        _targetWorkoutsThisWeek = 2;
+      } else if (freq == WorkoutFrequency.tresVezesPorSemana.name) {
+        _targetWorkoutsThisWeek = 3;
+      } else if (freq == WorkoutFrequency.cincoVezesPorSemana.name) {
+        _targetWorkoutsThisWeek = 5;
+      } else {
+        _targetWorkoutsThisWeek = 0;
+      }
+    });
+  }
+
+  Future<void> _loadActiveWorkoutSheet() async {
+    final prefs = await SharedPreferences.getInstance();
+    final activeSheetId = prefs.getString(SharedPreferencesKeys.activeWorkoutSheetId);
+    final activeSheetJson = prefs.getString(SharedPreferencesKeys.activeWorkoutSheetData);
+
+    if (activeSheetId != null && activeSheetJson != null) {
+      setState(() {
+        _activeWorkoutSheet = WorkoutSheet.fromJson(jsonDecode(activeSheetJson));
+      });
+    } else {
+      await _loadDefaultWorkoutSheets();
+    }
+  }
+
+  Future<void> _loadDefaultWorkoutSheets() async {
+    try {
+      final String response = await rootBundle.loadString('assets/data/workout_sheets.json');
+      final List<dynamic> data = json.decode(response);
+      final List<WorkoutSheet> defaultSheets =
+      data.map((json) => WorkoutSheet.fromJson(json)).toList();
+
+      if (defaultSheets.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        final firstSheet = defaultSheets.first;
+        firstSheet.isActive = true;
+        await prefs.setString(SharedPreferencesKeys.activeWorkoutSheetId, firstSheet.id);
+        await prefs.setString(SharedPreferencesKeys.activeWorkoutSheetData, jsonEncode(firstSheet.toJson()));
+        setState(() {
+          _activeWorkoutSheet = firstSheet;
+        });
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('Erro ao carregar fichas de treino padrão: $e');
+    }
+  }
+
+  Future<void> _resetWeeklyCountersIfNeeded() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastResetString = prefs.getString(SharedPreferencesKeys.lastWeeklyResetDate);
+    DateTime? lastResetDate = lastResetString != null ? DateTime.parse(lastResetString) : null;
+
+    final now = DateTime.now();
+    final currentMonday = now.subtract(Duration(days: now.weekday - 1));
+
+    if (lastResetDate == null || lastResetDate.isBefore(currentMonday.add(const Duration(hours: -1)))) {
+      await _achievementService.checkConsistentWeekAchievement();
+
+      await prefs.setInt(SharedPreferencesKeys.completedWorkoutsThisWeek, 0);
+      await prefs.setString(SharedPreferencesKeys.lastWeeklyResetDate, now.toIso8601String());
+
+      setState(() {
+        _completedWorkoutsThisWeek = 0;
+      });
+    }
+  }
+
+  Future<void> _markExerciseCompleted(int index) async {
+    if (_activeWorkoutSheet != null) {
+      setState(() {
+        _activeWorkoutSheet!.exercises[index].isCompleted =
+        !_activeWorkoutSheet!.exercises[index].isCompleted;
+      });
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          SharedPreferencesKeys.activeWorkoutSheetData, jsonEncode(_activeWorkoutSheet!.toJson()));
+    }
+  }
+
+  Future<void> _completeWorkoutSheet() async {
+    if (_activeWorkoutSheet != null) {
+      bool allCompleted = _activeWorkoutSheet!.exercises.every((e) => e.isCompleted);
+
+      if (!allCompleted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Por favor, complete todos os exercícios antes de finalizar a ficha.',
+                  style: AppStyles.smallTextStyle),
+              backgroundColor: AppColors.warningColor,
+            ),
+          );
+        }
+        return;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final historyJsonList = prefs.getStringList(SharedPreferencesKeys.activityHistory) ?? [];
+
+      final newEntry = ActivityHistoryEntry(
+        id: _uuid.v4(),
+        date: DateTime.now(),
+        modality: _activeWorkoutSheet!.modality.name, // CORRIGIDO AQUI: Pega a modalidade diretamente da ficha ativa
+        activityType: 'Ficha de Treino',
+        workoutSheetName: _activeWorkoutSheet!.name,
+        workoutSheetData: jsonEncode(_activeWorkoutSheet!.toJson()),
+        durationMinutes: null,
+        distanceKm: null,
+        notes: 'Ficha de treino concluída: ${_activeWorkoutSheet!.name}',
+      );
+
+      historyJsonList.add(jsonEncode(newEntry.toJson()));
+      await prefs.setStringList(SharedPreferencesKeys.activityHistory, historyJsonList);
+
+      // RESTAURADO: Atualizar contador de treinos concluídos esta semana
+      final currentCompleted = prefs.getInt(SharedPreferencesKeys.completedWorkoutsThisWeek) ?? 0;
+      await prefs.setInt(SharedPreferencesKeys.completedWorkoutsThisWeek, currentCompleted + 1);
+      setState(() {
+        _completedWorkoutsThisWeek = currentCompleted + 1;
+      });
+
+      // Notificar o serviço de conquistas
+      await _achievementService.notifyWorkoutCompleted(_activeWorkoutSheet!.modality.name);
+
+
+      _activeWorkoutSheet = _activeWorkoutSheet!.copyWith(
+        exercises: _activeWorkoutSheet!.exercises.map((e) => e.copyWith(isCompleted: false)).toList(),
+      );
+      await prefs.setString(
+          SharedPreferencesKeys.activeWorkoutSheetData, jsonEncode(_activeWorkoutSheet!.toJson()));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ficha de treino "${_activeWorkoutSheet!.name}" concluída e registrada!',
+                style: AppStyles.smallTextStyle),
+            backgroundColor: AppColors.successColor,
+          ),
+        );
+      }
+      _loadUserPreferences();
+    }
+  }
+
+  void _navigateToActivityLog() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ActivitySelectionScreen(),
+      ),
+    ).then((_) {
+      _loadUserPreferences();
+      _loadActiveWorkoutSheet();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: const Text('Início'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ActivityHistoryScreen()),
+              );
+            },
+            tooltip: 'Histórico de Atividades',
+          ),
+          IconButton(
+            icon: const Icon(Icons.military_tech_outlined),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AchievementsScreen()),
+              );
+            },
+            tooltip: 'Conquistas',
+          ),
+          IconButton(
+            icon: const Icon(Icons.person),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              ).then((_) {
+                _loadUserPreferences();
+              });
+            },
+            tooltip: 'Perfil',
+          ),
+        ],
+      ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/images/tela_corrida.png',
+            fit: BoxFit.cover,
+            colorBlendMode: BlendMode.darken,
+            color: Colors.black.withOpacity(0.5),
+          ),
+
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('Olá, $_userName!', style: AppStyles.titleTextStyle),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16.0),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardColor.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(15.0),
+                    border: Border.all(color: AppColors.borderColor, width: 1.0),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Suas Preferências:', style: AppStyles.headingStyle),
+                      const SizedBox(height: 8),
+                      Text('Modalidade Preferida: ${_userModality?.toCapitalized() ?? 'Não definida'}', style: AppStyles.bodyStyle),
+                      Text('Nível: ${_userLevel?.toCapitalized() ?? 'Não definido'}', style: AppStyles.bodyStyle),
+                      Text('Frequência Semanal: ${_userFrequency?.toCapitalized() ?? 'Não definida'}', style: AppStyles.bodyStyle),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Treinos Concluídos esta semana: $_completedWorkoutsThisWeek / $_targetWorkoutsThisWeek',
+                        style: AppStyles.bodyStyle.copyWith(
+                          color: _completedWorkoutsThisWeek >= _targetWorkoutsThisWeek && _targetWorkoutsThisWeek > 0
+                              ? AppColors.successColor
+                              : AppColors.accentColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text('Sua Ficha de Treino Ativa:', style: AppStyles.headingStyle),
+                const SizedBox(height: 16),
+                _activeWorkoutSheet != null
+                    ? Container(
+                  padding: const EdgeInsets.all(16.0),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardColor.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(15.0),
+                    border: Border.all(color: AppColors.accentColor, width: 2.0),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _activeWorkoutSheet!.name,
+                              style: AppStyles.headingStyle.copyWith(color: AppColors.accentColor),
+                            ),
+                          ),
+                          Icon(
+                            IconData(_activeWorkoutSheet!.icon ?? Icons.fitness_center.codePoint,
+                                fontFamily: 'MaterialIcons'),
+                            color: AppColors.accentColor,
+                            size: 30,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _activeWorkoutSheet!.description,
+                        style: AppStyles.bodyStyle.copyWith(color: AppColors.textSecondaryColor),
+                      ),
+                      const SizedBox(height: 16),
+                      Text('Exercícios:', style: AppStyles.bodyStyle.copyWith(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _activeWorkoutSheet!.exercises.length,
+                        itemBuilder: (context, index) {
+                          final exercise = _activeWorkoutSheet!.exercises[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            color: AppColors.primaryColor.withOpacity(0.7),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10.0),
+                              side: BorderSide(
+                                  color: exercise.isCompleted
+                                      ? AppColors.successColor
+                                      : AppColors.borderColor,
+                                  width: 1.0),
+                            ),
+                            child: ListTile(
+                              leading: Icon(
+                                exercise.isCompleted ? Icons.check_circle : Icons.circle_outlined,
+                                color: exercise.isCompleted ? AppColors.successColor : AppColors.textSecondaryColor,
+                              ),
+                              title: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    exercise.name,
+                                    style: AppStyles.bodyStyle.copyWith(
+                                      color: exercise.isCompleted
+                                          ? AppColors.textSecondaryColor
+                                          : AppColors.textPrimaryColor,
+                                      decoration: exercise.isCompleted ? TextDecoration.lineThrough : TextDecoration.none,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Séries/Repetições: ${exercise.setsReps}',
+                                    style: AppStyles.smallTextStyle,
+                                  ),
+                                  if (exercise.notes != null && exercise.notes!.isNotEmpty)
+                                    Text(
+                                      'Notas: ${exercise.notes!}',
+                                      style: AppStyles.smallTextStyle,
+                                    ),
+                                  // --- AQUI É ONDE ADICIONAMOS A IMAGEM ---
+                                  if (exercise.imageUrl != null && exercise.imageUrl!.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8.0),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(8.0),
+                                        child: Image.asset(
+                                          exercise.imageUrl!,
+                                          height: 180, // AUMENTADO PARA 180
+                                          width: double.infinity,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) => Container(
+                                            height: 180, // AUMENTADO PARA 180 (para o placeholder também)
+                                            width: double.infinity,
+                                            color: AppColors.borderColor,
+                                            child: Center(
+                                              child: Icon(
+                                                Icons.image_not_supported,
+                                                color: AppColors.textSecondaryColor,
+                                                size: 50,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              onTap: () => _markExerciseCompleted(index),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Center(
+                        child: ElevatedButton(
+                          onPressed: _completeWorkoutSheet,
+                          style: AppStyles.buttonStyle,
+                          child: Text('Concluir Ficha de Treino', style: AppStyles.buttonTextStyle),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+                    : Container(
+                  padding: const EdgeInsets.all(16.0),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardColor.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(15.0),
+                    border: Border.all(color: AppColors.borderColor, width: 1.0),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Nenhuma ficha de treino ativa no momento.',
+                        style: AppStyles.bodyStyle.copyWith(color: AppColors.textSecondaryColor),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () {
+                          widget.onNavigateToWorkoutSheets?.call();
+                        },
+                        style: AppStyles.buttonStyle,
+                        child: Text('Explorar Fichas de Treino', style: AppStyles.buttonTextStyle),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Center(
+                  child: ElevatedButton(
+                    onPressed: _navigateToActivityLog,
+                    style: AppStyles.buttonStyle,
+                    child: Text('Registrar Nova Atividade Avulsa', style: AppStyles.buttonTextStyle),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -1,0 +1,63 @@
+name: runfit_app
+
+description: Um aplicativo mobile para registro e organização de atividades físicas.
+
+# O bloco `publish_to: 'none'` impede a publicação acidental do seu pacote no pub.dev
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.6
+  shared_preferences: ^2.2.3
+  flutter_native_splash: ^2.4.0
+  geolocator: ^12.0.0 # Adicionar esta linha
+  uuid: ^4.3.3
+  intl: ^0.19.0
+  fl_chart: ^0.68.0
+  flutter_map: ^6.1.0 # Verifique a versão mais recente no pub.dev
+  latlong2: ^0.9.0    # Útil para LatLng e cálculos geométricos
+  image_picker: ^1.1.2
+  flutter_map_cancellable_tile_provider: ^2.0.0
+  package_info_plus: ^8.0.0
+  url_launcher: ^6.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+# As seções de assets, fontes e flutter_native_splash são configuradas aqui.
+flutter:
+  uses-material-design: true
+
+  # Para adicionar assets ao seu aplicativo, adicione uma seção assets.
+  assets:
+    - assets/data/workout_sheets.json
+    - assets/images/ # Esta linha adiciona toda a pasta assets/images/
+
+# Configuração para `flutter_native_splash`
+# Esta seção é lida pelo pacote para gerar as telas de splash nativas.
+flutter_native_splash:
+  # Cor de fundo da splash screen nativa no formato hexadecimal (#RRGGBB)
+  # Deve corresponder à AppColors.primaryColor do seu `app_colors.dart`
+  color: "#1A1A1A" # Manter preto (do AppColors.primaryColor)
+
+  # Caminho para a imagem que você quer usar na splash screen nativa
+  # Certifique-se de que este caminho está correto e a imagem existe.
+  image: assets/images/logo_hibridus.png # <--- Caminho da sua logo
+
+  # Configurações específicas para Android (opcional)
+  android: true
+  ios: true
+  web: false # Desative se não for usar para web
+
+  # Cor de fundo da imagem (opcional, se a imagem for transparente)
+  # Se sua logo for transparente, você pode definir um fundo.
+  # image_background: "#1A1A1A" # Opcional: mesma cor do `primaryColor` se a logo for transparente
