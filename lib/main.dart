@@ -2,24 +2,34 @@
 
 import 'package:flutter/material.dart';
 import 'package:runfit_app/screens/onboarding_screen.dart';
+import 'package:runfit_app/screens/login_screen.dart'; // Importe a tela de login
+import 'package:runfit_app/screens/main_screen.dart'; // Importe a tela principal (sua MainScreen, para o caso de login)
 import 'package:runfit_app/utils/app_colors.dart';
 import 'package:runfit_app/utils/app_text_input_themes.dart';
 import 'package:runfit_app/utils/app_styles.dart';
 import 'package:runfit_app/services/achievement_service.dart';
 import 'package:runfit_app/services/goal_service.dart';
 
-// ADICIONE ESTAS DUAS IMPORTAÇÕES
-import 'package:firebase_core/firebase_core.dart'; //
-import 'firebase_options.dart'; //
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <--- ADICIONE ESTA IMPORTAÇÃO
+import 'package:shared_preferences/shared_preferences.dart'; // <--- ADICIONE ESTA IMPORTAÇÃO
+import 'package:runfit_app/utils/app_constants.dart'; // <--- ADICIONE ESTA IMPORTAÇÃO (para SharedPreferencesKeys)
+import 'firebase_options.dart';
+
+// Função de nível superior para verificar o status do onboarding
+Future<bool> _checkOnboardingStatus() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getBool(SharedPreferencesKeys.isOnboardingCompleted) ?? false;
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // INICIALIZE O FIREBASE AQUI
-  await Firebase.initializeApp( //
-    options: DefaultFirebaseOptions.currentPlatform, //
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // Inicialize os serviços após o Firebase estar pronto
   await AchievementService().initializeAchievements();
   await GoalService().initializeGoals();
   runApp(const MyApp());
@@ -73,7 +83,33 @@ class MyApp extends StatelessWidget {
           textStyle: AppStyles.bodyStyle.copyWith(color: AppColors.textPrimaryColor),
         ),
       ),
-      home: const OnboardingScreen(),
+      home: StreamBuilder<User?>( // <--- Usa StreamBuilder para ouvir o estado de autenticação
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator()); // Carregando
+          }
+          if (snapshot.hasData) {
+            // Usuário logado
+            return const MainScreen();
+          } else {
+            // Usuário não logado, verificar onboarding
+            return FutureBuilder<bool>(
+              future: _checkOnboardingStatus(), // Chama a função de nível superior
+              builder: (context, onboardingSnapshot) {
+                if (onboardingSnapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (onboardingSnapshot.data == true) {
+                  return const LoginScreen(); // Onboarding concluído, vai para login
+                } else {
+                  return const OnboardingScreen(); // Onboarding não concluído, vai para onboarding
+                }
+              },
+            );
+          }
+        },
+      ),
     );
   }
 }

@@ -5,10 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:runfit_app/utils/app_colors.dart';
 import 'package:runfit_app/utils/app_styles.dart';
-import 'package:runfit_app/utils/app_constants.dart'; // Para FirebaseConstants, SharedPreferencesKeys e enums
-import 'package:runfit_app/screens/main_screen.dart';
-// Importação do Firebase Realtime Database
-import 'package:firebase_database/firebase_database.dart'; // <--- ADICIONE ESTA LINHA
+import 'package:runfit_app/utils/app_constants.dart'; // Para SharedPreferencesKeys
+// REMOVIDO: importação direta de FirebaseConstants
+import 'package:runfit_app/screens/login_screen.dart'; // Importe a tela de login
+import 'package:runfit_app/screens/main_screen.dart'; // Importe a tela principal (ainda usada para pushReplacement)
+// REMOVIDO: importação de Firebase Realtime Database para esta tela
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -21,80 +22,39 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
-  final TextEditingController _nameController = TextEditingController();
-  String? _selectedGender;
-  final TextEditingController _ageController = TextEditingController();
-  final TextEditingController _heightController = TextEditingController();
-  final TextEditingController _weightController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
-
-  // Referência ao banco de dados para o perfil do usuário
-  late DatabaseReference _userProfileRef; // <--- ADICIONE ESTA LINHA
+  // REMOVIDO: Controladores e variáveis de estado relacionados ao formulário de perfil
+  // (nome, gênero, idade, altura, peso) foram movidos ou serão tratados após o registro/login.
 
   @override
   void initState() {
     super.initState();
-    // Inicializa a referência do Firebase com o userId fixo
-    _userProfileRef = FirebaseDatabase.instance.ref('users/${FirebaseConstants.userId}/profile'); // <--- ADICIONE ESTA LINHA
+    // A inicialização da referência do Firebase de perfil foi removida daqui.
+    // Os dados do perfil serão salvos após o login/registro do usuário.
   }
 
   @override
   void dispose() {
     _pageController.dispose();
-    _nameController.dispose();
-    _ageController.dispose();
-    _heightController.dispose();
-    _weightController.dispose();
+    // REMOVIDO: Dispose dos controladores do formulário de perfil.
     super.dispose();
   }
 
   Future<void> _completeOnboarding() async {
-    if (_formKey.currentState!.validate()) {
-      final prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(SharedPreferencesKeys.isOnboardingCompleted, true); // Marca o onboarding como concluído
 
-      // Marca o onboarding como concluído no SharedPreferences (ainda é útil aqui)
-      await prefs.setBool(SharedPreferencesKeys.isOnboardingCompleted, true);
-
-      // Salva os dados do perfil no Firebase Realtime Database
-      try {
-        await _userProfileRef.set({ // <--- MUDANÇA PRINCIPAL AQUI
-          'name': _nameController.text,
-          'gender': _selectedGender!,
-          'age': int.parse(_ageController.text),
-          'height': double.parse(_heightController.text),
-          'weight': double.parse(_weightController.text),
-          // Adicione aqui outros campos de perfil que possam ser configurados inicialmente
-          // Como modalidade, nível, frequência, se você quiser que o onboarding cubra isso.
-          // Por enquanto, apenas os campos básicos de perfil.
-        });
-        // print('Dados do perfil salvos no Firebase!'); // Opcional para depuração
-      } catch (e) {
-        // ignore: avoid_print
-        print('Erro ao salvar dados do perfil no Firebase: $e');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar( // Feedback de erro
-            SnackBar(
-              content: Text('Erro ao salvar seu perfil. Tente novamente.', style: AppStyles.smallTextStyle),
-              backgroundColor: AppColors.errorColor,
-            ),
-          );
-        }
-        return; // Não avança se houver erro ao salvar
-      }
-
-
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const MainScreen()),
-        );
-      }
+    if (mounted) {
+      // Após o onboarding, navegue para a tela de Login.
+      // O usuário precisará criar uma conta ou fazer login.
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const LoginScreen()), // Leva para a LoginScreen
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     List<Widget> onboardingPages = [
-      // ... (suas páginas de onboarding existentes)
       // Primeira página: Logo + Bem-vindo
       Stack(
         children: [
@@ -159,8 +119,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         blendMode: BlendMode.darken,
         blendColor: Colors.black.withOpacity(0.7),
       ),
-      // Última página: Formulário de Perfil
-      _buildProfileFormPage(),
+      // Última página: Agora será um slide de "Pronto para começar?" que leva ao login/registro.
+      _buildCallToActionPage(), // NOVO: Página final para chamar para login/registro
     ];
 
     return Scaffold(
@@ -214,7 +174,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     style: AppStyles.buttonStyle,
                     child: Text('Próximo', style: AppStyles.buttonTextStyle),
                   )
-                else // Na última página (formulário)
+                else // Na última página (chamada para ação)
                   Expanded(
                     child: ElevatedButton(
                       onPressed: _completeOnboarding,
@@ -230,7 +190,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // Helper para construir as páginas de onboarding (agora com width e height para preencher)
+  // Helper para construir as páginas de onboarding
   Widget _buildOnboardingBasePage({
     required String imagePath,
     String? title,
@@ -289,131 +249,36 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // A página do formulário de perfil
-  Widget _buildProfileFormPage() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24.0, 60.0, 24.0, 100.0),
-      child: Form(
-        key: _formKey,
+  // NOVA PÁGINA: Chamada para ação para Login/Registro
+  Widget _buildCallToActionPage() {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage('assets/images/tela_inicio.png'), // Imagem de fundo similar
+          fit: BoxFit.cover,
+          colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.5), BlendMode.darken),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
             Text(
-              'Nos conte um pouco sobre você para começarmos!',
-              style: AppStyles.headingStyle,
+              'Pronto para começar sua jornada fitness?',
+              style: AppStyles.titleTextStyle.copyWith(fontSize: 32),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 32),
-
-            TextFormField(
-              controller: _nameController,
-              style: AppStyles.bodyStyle.copyWith(color: AppColors.textPrimaryColor),
-              decoration: const InputDecoration(
-                hintText: 'Digite seu nome',
-                labelText: 'Nome',
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Por favor, digite seu nome';
-                }
-                return null;
-              },
+            const SizedBox(height: 20),
+            Text(
+              'Crie sua conta ou faça login para começar a rastrear, planejar e alcançar seus objetivos!',
+              style: AppStyles.bodyStyle.copyWith(color: AppColors.textSecondaryColor, fontSize: 18),
+              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 16),
-
-            DropdownButtonFormField<String>(
-              value: _selectedGender,
-              decoration: const InputDecoration(
-                labelText: 'Gênero',
-              ),
-              style: AppStyles.bodyStyle.copyWith(color: AppColors.textPrimaryColor),
-              dropdownColor: AppColors.cardColor,
-              items: UserGender.values.map((UserGender gender) {
-                String formattedName = '';
-                if (gender == UserGender.masculino) formattedName = 'Masculino';
-                if (gender == UserGender.feminino) formattedName = 'Feminino';
-                if (gender == UserGender.naoInformar) formattedName = 'Não Informar';
-                return DropdownMenuItem<String>(
-                  value: gender.name,
-                  child: Text(formattedName, style: AppStyles.bodyStyle),
-                );
-              }).toList(),
-              onChanged: (String? newValue) {
-                setState(() {
-                  _selectedGender = newValue;
-                });
-              },
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Por favor, selecione seu gênero';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-
-            TextFormField(
-              controller: _ageController,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              style: AppStyles.bodyStyle.copyWith(color: AppColors.textPrimaryColor),
-              decoration: const InputDecoration(
-                hintText: 'Ex: 30',
-                labelText: 'Idade',
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Por favor, digite sua idade';
-                }
-                if (int.tryParse(value) == null || int.parse(value)! <= 0) {
-                  return 'Idade deve ser um número positivo';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-
-            TextFormField(
-              controller: _heightController,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}$'))],
-              style: AppStyles.bodyStyle.copyWith(color: AppColors.textPrimaryColor),
-              decoration: const InputDecoration(
-                hintText: 'Ex: 1.75 (em metros)',
-                labelText: 'Altura (m)',
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Por favor, digite sua altura';
-                }
-                if (double.tryParse(value) == null || double.parse(value)! <= 0) {
-                  return 'Altura deve ser um número positivo';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-
-            TextFormField(
-              controller: _weightController,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}$'))],
-              style: AppStyles.bodyStyle.copyWith(color: AppColors.textPrimaryColor),
-              decoration: const InputDecoration(
-                hintText: 'Ex: 70.5 (em quilogramas)',
-                labelText: 'Peso (kg)',
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Por favor, digite seu peso';
-                }
-                if (double.tryParse(value) == null || double.parse(value)! <= 0) {
-                  return 'Peso deve ser um número positivo';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 150),
           ],
         ),
       ),

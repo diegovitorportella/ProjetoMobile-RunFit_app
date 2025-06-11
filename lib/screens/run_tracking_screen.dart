@@ -19,8 +19,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:runfit_app/services/goal_service.dart';
 import 'package:runfit_app/data/models/goal.dart';
-// Importação do Firebase Realtime Database
-import 'package:firebase_database/firebase_database.dart'; // <--- ADICIONE ESTA LINHA
+import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 
 class RunTrackingScreen extends StatefulWidget {
@@ -49,9 +49,22 @@ class _RunTrackingScreenState extends State<RunTrackingScreen> {
   final AchievementService _achievementService = AchievementService();
   final GoalService _goalService = GoalService();
 
-  // Referência ao banco de dados Realtime Database
-  final DatabaseReference _activitiesRef = FirebaseDatabase.instance.ref('activities'); // <--- ADICIONE ESTA LINHA
+  DatabaseReference? _userActivitiesRef; // Tornar anulável
 
+
+  @override
+  void initState() {
+    super.initState();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      _userActivitiesRef = FirebaseDatabase.instance.ref('users/${user.uid}/activities');
+    } else {
+      // ignore: avoid_print
+      print('RunTrackingScreen: Usuário não logado. Atividades não serão salvas no Firebase.');
+      // Opcional: Aqui você pode exibir um alerta e navegar para a tela de login
+      // ou desabilitar a funcionalidade de rastreamento.
+    }
+  }
 
   @override
   void dispose() {
@@ -112,6 +125,19 @@ class _RunTrackingScreenState extends State<RunTrackingScreen> {
   void _startTracking() async {
     final hasPermission = await _handleLocationPermission();
     if (!hasPermission) return;
+
+    if (FirebaseAuth.instance.currentUser == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Por favor, faça login para rastrear suas atividades.', style: AppStyles.smallTextStyle),
+            backgroundColor: AppColors.errorColor,
+          ),
+        );
+      }
+      return;
+    }
+
 
     if (!mounted) return;
 
@@ -204,18 +230,27 @@ class _RunTrackingScreenState extends State<RunTrackingScreen> {
     }
   }
 
-  // Função para salvar uma atividade no Firebase Realtime Database
-  Future<void> _saveActivityToFirebase(ActivityHistoryEntry newEntry) async { // <--- ADICIONE ESTA FUNÇÃO
+  Future<void> _saveActivityToFirebase(ActivityHistoryEntry newEntry) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      // ignore: avoid_print
+      print('Erro: Usuário não logado ao tentar salvar atividade.');
+      return;
+    }
+    if (_userActivitiesRef == null) { // Adicione esta verificação
+      // ignore: avoid_print
+      print('RunTrackingScreen: _userActivitiesRef é null, não salvando atividade no Firebase.');
+      return;
+    }
     try {
-      final newActivityKey = _activitiesRef.push().key; // Gera um ID único
+      final newActivityKey = _userActivitiesRef!.push().key; // Use '!' após verificar null
 
       if (newActivityKey != null) {
-        await _activitiesRef.child(newActivityKey).set(newEntry.toJson());
-        // print('Atividade de corrida salva no Firebase com a chave: $newActivityKey'); // Opcional para depuração
+        await _userActivitiesRef!.child(newActivityKey).set(newEntry.toJson()); // Use '!' após verificar null
       }
     } catch (e) {
+      // ignore: avoid_print
       print('Erro ao salvar atividade de corrida no Firebase: $e');
-      // Considere adicionar feedback ao usuário aqui
     }
   }
 
@@ -295,7 +330,9 @@ class _RunTrackingScreenState extends State<RunTrackingScreen> {
         },
       );
 
-      if (mounted && shouldSave == true) {
+      if (!mounted) return; // Adicione esta verificação aqui, após o showDialog
+
+      if (shouldSave == true) {
         final prefs = await SharedPreferences.getInstance();
         List<String> historyJsonList = prefs.getStringList(SharedPreferencesKeys.activityHistory) ?? [];
 
@@ -318,13 +355,10 @@ class _RunTrackingScreenState extends State<RunTrackingScreen> {
           averagePace: averagePace,
         );
 
-        // Salva no SharedPreferences
         historyJsonList.add(json.encode(newEntry.toJson()));
         await prefs.setStringList(SharedPreferencesKeys.activityHistory, historyJsonList);
 
-        // Salva no Firebase Realtime Database
-        await _saveActivityToFirebase(newEntry); // <--- CHAMADA AQUI!
-
+        await _saveActivityToFirebase(newEntry);
 
         final currentCompleted = prefs.getInt(SharedPreferencesKeys.completedWorkoutsThisWeek) ?? 0;
         await prefs.setInt(SharedPreferencesKeys.completedWorkoutsThisWeek, currentCompleted + 1);
@@ -334,7 +368,6 @@ class _RunTrackingScreenState extends State<RunTrackingScreen> {
           _showAchievementUnlockedDialog(unlockedAch);
         }
 
-        // NOVO: Atualizar metas ao finalizar uma corrida
         final newlyCompletedGoals = await _goalService.updateGoalsProgress(
           modality: WorkoutModality.corrida.name,
           durationMinutes: _elapsedSeconds / 60.0,
@@ -346,32 +379,43 @@ class _RunTrackingScreenState extends State<RunTrackingScreen> {
           }
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Corrida registrada com sucesso!', style: AppStyles.smallTextStyle.copyWith(color: AppColors.textPrimaryColor)),
-            backgroundColor: AppColors.primaryColor,
-          ),
-        );
-        int count = 0;
-        Navigator.of(context).popUntil((_) => count++ >= 2);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Corrida registrada com sucesso!', style: AppStyles.smallTextStyle.copyWith(color: AppColors.textPrimaryColor)),
+              backgroundColor: AppColors.primaryColor,
+            ),
+          );
+        }
+        if (mounted) {
+          int count = 0;
+          Navigator.of(context).popUntil((_) => count++ >= 2);
+        }
 
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Corrida descartada.', style: AppStyles.smallTextStyle.copyWith(color: AppColors.textPrimaryColor)),
-            backgroundColor: AppColors.warningColor,
-          ),
-        );
+      } else { // shouldSave == false (descartar)
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Corrida descartada.', style: AppStyles.smallTextStyle.copyWith(color: AppColors.textPrimaryColor)),
+              backgroundColor: AppColors.warningColor,
+            ),
+          );
+        }
+        if (mounted) {
+          int count = 0;
+          Navigator.of(context).popUntil((_) => count++ >= 2);
+        }
+      }
+    } else { // _elapsedSeconds == 0 && _distanceKm == 0
+      if (mounted) {
         int count = 0;
         Navigator.of(context).popUntil((_) => count++ >= 2);
       }
-    } else if (mounted) {
-      int count = 0;
-      Navigator.of(context).popUntil((_) => count++ >= 2);
     }
   }
 
   void _showAchievementUnlockedDialog(Achievement achievement) {
+    if (!mounted) return;
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -409,8 +453,8 @@ class _RunTrackingScreenState extends State<RunTrackingScreen> {
     );
   }
 
-  // NOVO MÉTODO: Exibe um diálogo de meta concluída
   void _showGoalCompletedDialog(Goal goal) {
+    if (!mounted) return;
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -500,7 +544,7 @@ class _RunTrackingScreenState extends State<RunTrackingScreen> {
         children: [
           // Seção do Mapa
           Expanded(
-            flex: 1, // NOVO: Alterado de flex: 2 para flex: 1
+            flex: 1,
             child: Container(
               color: AppColors.cardColor,
               child: _pathPositions.isEmpty && !_isTracking

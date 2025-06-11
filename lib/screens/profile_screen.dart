@@ -5,15 +5,16 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:runfit_app/utils/app_colors.dart';
 import 'package:runfit_app/utils/app_styles.dart';
-import 'package:runfit_app/utils/app_constants.dart'; // Para FirebaseConstants e enums
+import 'package:runfit_app/utils/app_constants.dart'; // Para enums
 import 'package:runfit_app/screens/achievements_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:runfit_app/screens/about_app_screen.dart';
 import 'package:runfit_app/screens/goals_screen.dart';
-// Importação do Firebase Realtime Database
-import 'package:firebase_database/firebase_database.dart'; // <--- ADICIONE ESTA LINHA
+import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:runfit_app/screens/login_screen.dart';
 
 
 class ProfileScreen extends StatefulWidget {
@@ -34,21 +35,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _userModality;
   String? _userLevel;
   String? _userFrequency;
-  String? _profileImagePath; // Este ainda será salvo no SharedPreferences
+  String? _profileImagePath;
 
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _picker = ImagePicker();
 
-  // Referência ao banco de dados para o perfil do usuário
-  late DatabaseReference _userProfileRef; // <--- ADICIONE ESTA LINHA
+  late DatabaseReference _userProfileRef;
 
 
   @override
   void initState() {
     super.initState();
-    // Inicializa a referência do Firebase com o userId fixo
-    _userProfileRef = FirebaseDatabase.instance.ref('users/${FirebaseConstants.userId}/profile'); // <--- ADICIONE ESTA LINHA
-    _loadUserPreferences();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      _userProfileRef = FirebaseDatabase.instance.ref('users/${user.uid}/profile');
+      _loadUserPreferences();
+    } else {
+      // Se não houver usuário logado aqui, o aplicativo deve estar em um estado inválido
+      // considerando o fluxo de autenticação. Redirecionar para login.
+      // ignore: avoid_print
+      print('ProfileScreen: Usuário não logado. Redirecionando para tela de login.');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+                (Route<dynamic> route) => false,
+          );
+        }
+      });
+    }
   }
 
   @override
@@ -60,22 +75,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  // Modificado para carregar preferências do Firebase e SharedPreferences (para imagem)
   Future<void> _loadUserPreferences() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // Carregar imagem de perfil do SharedPreferences (mantido aqui)
+    if (!mounted) return;
+
+    // Apenas carrega o caminho da imagem de perfil do SharedPreferences
     setState(() {
       _profileImagePath = prefs.getString(SharedPreferencesKeys.profileImagePath);
     });
 
-    // Carregar dados do perfil do Firebase Realtime Database
     try {
-      final snapshot = await _userProfileRef.once(); // Obtém os dados uma única vez
+      final snapshot = await _userProfileRef.once();
+
+      if (!mounted) return;
+
       final dynamic userData = snapshot.snapshot.value;
 
       if (userData != null && userData is Map) {
-        // Converte para Map<String, dynamic> para segurança de tipo
         final Map<String, dynamic> profileData = Map<String, dynamic>.from(userData);
 
         setState(() {
@@ -88,45 +105,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _userLevel = profileData['level'];
           _userFrequency = profileData['frequency'];
         });
-        // print('Dados do perfil carregados do Firebase!'); // Opcional para depuração
       } else {
-        // print('Nenhum dado de perfil encontrado no Firebase.'); // Opcional
-        // Se não houver dados no Firebase, tente carregar do SharedPreferences (compatibilidade inicial)
-        // Isso é um fallback para migrar usuários antigos ou preencher se o onboarding não salvou tudo
+        // Se não houver dados de perfil no Firebase, significa que o usuário
+        // pode ter criado a conta, mas não preencheu o perfil inicial.
+        // Neste ponto, ele terá que preencher. Os campos ficarão vazios.
+        // Opcional: Você pode considerar redirecionar para ProfileSetupScreen aqui
+        // se o perfil estiver vazio, mas isso pode gerar loops se não for bem controlado.
+        // Por enquanto, apenas os campos ficarão vazios para ele preencher/salvar.
         setState(() {
-          _nameController.text = prefs.getString(SharedPreferencesKeys.userName) ?? '';
-          _userGender = prefs.getString(SharedPreferencesKeys.userGender);
-          _ageController.text = (prefs.getInt(SharedPreferencesKeys.userAge) ?? '').toString();
-          _heightController.text = (prefs.getDouble(SharedPreferencesKeys.userHeight) ?? '').toString();
-          _weightController.text = (prefs.getDouble(SharedPreferencesKeys.userWeight) ?? '').toString();
-          _userModality = prefs.getString(SharedPreferencesKeys.userModality);
-          _userLevel = prefs.getString(SharedPreferencesKeys.userLevel);
-          _userFrequency = prefs.getString(SharedPreferencesKeys.userFrequency);
+          _nameController.text = ''; // Limpar para o usuário preencher
+          _userGender = null;
+          _ageController.text = '';
+          _heightController.text = '';
+          _weightController.text = '';
+          _userModality = null;
+          _userLevel = null;
+          _userFrequency = null;
         });
-        // Após carregar do SharedPreferences (se existirem), salve no Firebase para migrar
-        if (_nameController.text.isNotEmpty) {
-          await _saveUserPreferencesToFirebase(); // Salva no Firebase para persistência futura
-        }
       }
     } catch (e) {
       // ignore: avoid_print
       print('Erro ao carregar dados do perfil do Firebase: $e');
-      // Em caso de erro no Firebase, tente carregar do SharedPreferences como fallback
-      setState(() {
-        _nameController.text = prefs.getString(SharedPreferencesKeys.userName) ?? '';
-        _userGender = prefs.getString(SharedPreferencesKeys.userGender);
-        _ageController.text = (prefs.getInt(SharedPreferencesKeys.userAge) ?? '').toString();
-        _heightController.text = (prefs.getDouble(SharedPreferencesKeys.userHeight) ?? '').toString();
-        _weightController.text = (prefs.getDouble(SharedPreferencesKeys.userWeight) ?? '').toString();
-        _userModality = prefs.getString(SharedPreferencesKeys.userModality);
-        _userLevel = prefs.getString(SharedPreferencesKeys.userLevel);
-        _userFrequency = prefs.getString(SharedPreferencesKeys.userFrequency);
-      });
+      if (mounted) {
+        setState(() {
+          // Em caso de erro, limpe os campos para que o usuário possa tentar novamente
+          _nameController.text = '';
+          _userGender = null;
+          _ageController.text = '';
+          _heightController.text = '';
+          _weightController.text = '';
+          _userModality = null;
+          _userLevel = null;
+          _userFrequency = null;
+        });
+      }
     }
   }
 
-  // Nova função para salvar apenas no Firebase
   Future<void> _saveUserPreferencesToFirebase() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      // ignore: avoid_print
+      print('Erro: Usuário não logado ao tentar salvar perfil no Firebase.');
+      return;
+    }
     try {
       await _userProfileRef.set({
         'name': _nameController.text,
@@ -137,9 +159,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'modality': _userModality,
         'level': _userLevel,
         'frequency': _userFrequency,
-        // profileImagePath não vai aqui, pois ele é local no SharedPreferences
       });
-      // print('Dados do perfil salvos no Firebase com sucesso!');
     } catch (e) {
       // ignore: avoid_print
       print('Erro ao salvar dados do perfil no Firebase: $e');
@@ -154,17 +174,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // Função principal para salvar preferências (agora primariamente no Firebase)
   Future<void> _saveUserPreferences() async {
     if (_formKey.currentState!.validate()) {
       final prefs = await SharedPreferences.getInstance();
 
-      // Salva a imagem de perfil no SharedPreferences (mantido aqui)
+      if (!mounted) return;
+
       if (_profileImagePath != null) {
         await prefs.setString(SharedPreferencesKeys.profileImagePath, _profileImagePath!);
       }
 
-      // Salva o resto das preferências no Firebase
       await _saveUserPreferencesToFirebase();
 
       if (mounted) {
@@ -174,8 +193,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             backgroundColor: AppColors.successColor,
           ),
         );
-        // Não é mais necessário recarregar _loadUserPreferences() aqui, pois o Firebase é a fonte
-        // e se for necessário um refresh, o StreamBuilder ou uma abordagem de estado mais sofisticada lidaria.
       }
     }
   }
@@ -215,8 +232,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _getImage(ImageSource source) async {
     final XFile? pickedFile = await _picker.pickImage(source: source, imageQuality: 80);
 
+    if (!mounted) return;
+
     if (pickedFile != null) {
       final prefs = await SharedPreferences.getInstance();
+
+      if (!mounted) return;
+
       String? pathOrUrl;
 
       if (kIsWeb) {
@@ -225,7 +247,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         pathOrUrl = pickedFile.path;
       }
 
-      await prefs.setString(SharedPreferencesKeys.profileImagePath, pathOrUrl!); // Ainda salva no SharedPreferences
+      await prefs.setString(SharedPreferencesKeys.profileImagePath, pathOrUrl!);
       setState(() {
         _profileImagePath = pathOrUrl;
       });
@@ -243,6 +265,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
           SnackBar(
             content: Text('Nenhuma imagem selecionada.', style: AppStyles.smallTextStyle),
             backgroundColor: AppColors.warningColor,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _signOut() async {
+    try {
+      await FirebaseAuth.instance.signOut();
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+              (Route<dynamic> route) => false,
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Você foi desconectado.', style: AppStyles.smallTextStyle),
+            backgroundColor: AppColors.primaryColor,
+          ),
+        );
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('Erro ao fazer logout: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao desconectar: $e', style: AppStyles.smallTextStyle),
+            backgroundColor: AppColors.errorColor,
           ),
         );
       }
@@ -545,12 +596,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Divider(color: AppColors.borderColor, height: 1),
               const SizedBox(height: 16),
 
-
               Center(
                 child: ElevatedButton(
                   onPressed: _saveUserPreferences,
                   style: AppStyles.buttonStyle,
                   child: Text('Salvar Preferências', style: AppStyles.buttonTextStyle),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Center(
+                child: ElevatedButton(
+                  onPressed: _signOut,
+                  style: AppStyles.buttonStyle.copyWith(
+                    backgroundColor: MaterialStateProperty.all(AppColors.errorColor),
+                  ),
+                  child: Text('Sair da Conta', style: AppStyles.buttonTextStyle),
                 ),
               ),
             ],

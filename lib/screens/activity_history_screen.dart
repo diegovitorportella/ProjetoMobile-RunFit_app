@@ -15,9 +15,11 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 
-// Importação do Firebase Realtime Database
 import 'package:firebase_database/firebase_database.dart';
-import 'dart:async'; // Necessário para StreamSubscription
+import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:runfit_app/screens/login_screen.dart';
+
 
 class ActivityHistoryScreen extends StatefulWidget {
   const ActivityHistoryScreen({super.key});
@@ -31,7 +33,6 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   List<ActivityHistoryEntry> _filteredActivityHistory = [];
   bool _isLoading = true;
 
-  // Variáveis de estado para os filtros
   DateTime? _startDateFilter;
   DateTime? _endDateFilter;
   String? _selectedModalityFilter;
@@ -42,23 +43,42 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   double? _maxDistanceFilter;
   String? _workoutSheetNameFilter;
 
-  // Controladores de texto para campos numéricos de filtro
   final TextEditingController _minDurationController = TextEditingController();
   final TextEditingController _maxDurationController = TextEditingController();
   final TextEditingController _minDistanceController = TextEditingController();
   final TextEditingController _maxDistanceController = TextEditingController();
   final TextEditingController _workoutSheetNameController = TextEditingController();
 
-  // Referência e Subscription para o Firebase Realtime Database
-  late DatabaseReference _activitiesRef;
+  DatabaseReference? _userActivitiesRef;
   StreamSubscription<DatabaseEvent>? _activitiesSubscription;
 
 
   @override
   void initState() {
     super.initState();
-    _activitiesRef = FirebaseDatabase.instance.ref('activities');
-    _loadActivitiesFromFirebase();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      _userActivitiesRef = FirebaseDatabase.instance.ref('users/${user.uid}/activities');
+      _loadActivitiesFromFirebase();
+    } else {
+      // ignore: avoid_print
+      print('ActivityHistoryScreen: Usuário não logado. Histórico de atividades não será carregado.');
+      setState(() {
+        _isLoading = false;
+        _activityHistory = [];
+        _filteredActivityHistory = [];
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Por favor, faça login para ver seu histórico.', style: AppStyles.smallTextStyle),
+              backgroundColor: AppColors.errorColor,
+            ),
+          );
+        }
+      });
+    }
     _minDurationController.addListener(_applyFilters);
     _maxDurationController.addListener(_applyFilters);
     _minDistanceController.addListener(_applyFilters);
@@ -77,41 +97,42 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
     super.dispose();
   }
 
-  // Remova ou comente a função _loadActivityHistory() se você não quiser mais usar o SharedPreferences como fonte primária
-  // Future<void> _loadActivityHistory() async {
-  //   final prefs = await SharedPreferences.getInstance();
-  //   List<String> historyJsonList = prefs.getStringList(SharedPreferencesKeys.activityHistory) ?? [];
-  //   setState(() {
-  //     _activityHistory = historyJsonList.map((jsonString) => ActivityHistoryEntry.fromJson(json.decode(jsonString))).toList();
-  //     _activityHistory.sort((a, b) => b.date.compareTo(a.date));
-  //     _filteredActivityHistory = List.from(_activityHistory);
-  //     _isLoading = false;
-  //   });
-  // }
-
-  // Função para carregar atividades do Firebase Realtime Database
   Future<void> _loadActivitiesFromFirebase() async {
+    if (_userActivitiesRef == null) {
+      // ignore: avoid_print
+      print('ActivityHistoryScreen: _userActivitiesRef é null, não carregando atividades do Firebase.');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _activityHistory = [];
+          _filteredActivityHistory = [];
+        });
+      }
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
     try {
-      // Ouve mudanças nos dados em tempo real
-      _activitiesSubscription = _activitiesRef.onValue.listen((event) {
+      _activitiesSubscription = _userActivitiesRef!.onValue.listen((event) {
+        if (!mounted) {
+          _activitiesSubscription?.cancel();
+          return;
+        }
+
         final data = event.snapshot.value;
         if (data != null) {
-          // Firebase retorna um Map<dynamic, dynamic> que pode ser LinkedMap.
-          // Converte para Map<String, dynamic> de forma segura.
           final Map<String, dynamic> activitiesMap = Map<String, dynamic>.from(data as Map);
 
           List<ActivityHistoryEntry> fetchedActivities = [];
           activitiesMap.forEach((key, value) {
-            // Garante que 'value' é um Map antes de passar para fromJson
             fetchedActivities.add(ActivityHistoryEntry.fromJson(Map<String, dynamic>.from(value)));
           });
           setState(() {
             _activityHistory = fetchedActivities;
-            _activityHistory.sort((a, b) => b.date.compareTo(a.date)); // Ordena do mais recente
-            _applyFilters(); // Reaplica os filtros sempre que os dados mudam
+            _activityHistory.sort((a, b) => b.date.compareTo(a.date));
+            _applyFilters();
             _isLoading = false;
           });
         } else {
@@ -123,10 +144,13 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
         }
       });
     } catch (e) {
+      // ignore: avoid_print
       print('Erro ao carregar atividades do Firebase: $e');
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -136,7 +160,6 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       _filteredActivityHistory = _activityHistory.where((entry) {
         bool matches = true;
 
-        // Filtro por data
         if (_startDateFilter != null) {
           if (entry.date.isBefore(DateTime(_startDateFilter!.year, _startDateFilter!.month, _startDateFilter!.day))) {
             matches = false;
@@ -148,17 +171,14 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
           }
         }
 
-        // Filtro por modalidade
         if (matches && _selectedModalityFilter != null && _selectedModalityFilter != 'Todos') {
           matches = entry.modality == _selectedModalityFilter;
         }
 
-        // Filtro por tipo de atividade
         if (matches && _selectedActivityTypeFilter != null && _selectedActivityTypeFilter != 'Todos') {
           matches = entry.activityType == _selectedActivityTypeFilter;
         }
 
-        // Filtro por duração
         _minDurationFilter = double.tryParse(_minDurationController.text);
         _maxDurationFilter = double.tryParse(_maxDurationController.text);
         if (matches && _minDurationFilter != null) {
@@ -172,7 +192,6 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
           }
         }
 
-        // Filtro por distância
         _minDistanceFilter = double.tryParse(_minDistanceController.text);
         _maxDistanceFilter = double.tryParse(_maxDistanceController.text);
         if (matches && _minDistanceFilter != null) {
@@ -186,7 +205,6 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
           }
         }
 
-        // Filtro por nome da planilha de treino (apenas para tipo "Ficha de Treino")
         _workoutSheetNameFilter = _workoutSheetNameController.text.trim().toLowerCase();
         if (matches && _workoutSheetNameFilter != null && _workoutSheetNameFilter!.isNotEmpty) {
           if (entry.activityType != 'Ficha de Treino' || entry.workoutSheetName == null || !entry.workoutSheetName!.toLowerCase().contains(_workoutSheetNameFilter!)) {
@@ -346,7 +364,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                                       style: AppStyles.buttonStyle.copyWith(
                                         padding: MaterialStateProperty.all(const EdgeInsets.symmetric(vertical: 12)),
                                         backgroundColor: MaterialStateProperty.all(AppColors.cardColor),
-                                        side: MaterialStateProperty.all(BorderSide(color: AppColors.borderColor)), // Corrigido aqui
+                                        side: MaterialStateProperty.all(BorderSide(color: AppColors.borderColor)),
                                       ),
                                       child: Text(
                                         _endDateFilter == null
@@ -497,7 +515,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   }
 
 
-  // --- Métodos de Pie Chart (mantidos iguais, mas agora usam _filteredActivityHistory) ---
+  // --- Métodos de Pie Chart (adicionados novamente) ---
   List<PieChartSectionData> _getPieChartSections(BuildContext context) {
     if (_filteredActivityHistory.isEmpty) {
       return [];
@@ -519,6 +537,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       final String modality = entry.key;
       final int count = entry.value;
       final double percentage = (count / _filteredActivityHistory.length) * 100;
+      // Garanta que `modality` não é nulo antes de chamar métodos nele
       String formattedModality = modality.replaceAllMapped(RegExp(r'([A-Z])'), (match) => ' ${match.group(1)}').toTitleCase();
       final color = pieColors[colorIndex % pieColors.length];
       colorIndex++;
@@ -564,6 +583,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       final String modality = entry.key;
       final double duration = entry.value;
       final double percentage = (duration / totalDuration) * 100;
+      // Garanta que `modality` não é nulo antes de chamar métodos nele
       String formattedModality = modality.replaceAllMapped(RegExp(r'([A-Z])'), (match) => ' ${match.group(1)}').toTitleCase();
       final color = pieColors[colorIndex % pieColors.length];
       colorIndex++;
@@ -583,9 +603,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       );
     }).toList();
   }
-  // --- Fim dos Métodos de Pie Chart ---
 
-  // NOVO MÉTODO: Função para formatar a duração em HH:mm:ss
+
   String _formatDuration(double? durationMinutes) {
     if (durationMinutes == null) return 'N/A';
 
@@ -730,12 +749,10 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
               itemCount: _filteredActivityHistory.length,
               itemBuilder: (context, index) {
                 final entry = _filteredActivityHistory[index];
-                // Condição para exibir o mapa: Modalidade Corrida e ter coordenadas
                 final bool showMap = entry.modality == WorkoutModality.corrida.name &&
                     entry.pathCoordinates != null &&
                     entry.pathCoordinates!.isNotEmpty;
 
-                // Dados para o mapa (se houver)
                 List<LatLng> pathPoints = [];
                 LatLng? mapCenter;
                 List<Marker> mapMarkers = [];
@@ -748,7 +765,6 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                   if (pathPoints.isNotEmpty) {
                     mapCenter = pathPoints.first;
 
-                    // Adicionar marcadores para início e fim
                     mapMarkers.add(
                       Marker(
                         point: pathPoints.first,
@@ -834,7 +850,6 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
 
-                          // Exibir exercícios detalhados para Musculação
                           if (entry.modality == WorkoutModality.musculacao.name && entry.loggedExercises != null && entry.loggedExercises!.isNotEmpty) ...[
                             const SizedBox(height: 12),
                             Text(
@@ -858,7 +873,6 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                             ),
                           ],
 
-                          // Widget do Mini-Mapa com FlutterMap
                           if (showMap && mapCenter != null) ...[
                             const SizedBox(height: 16),
                             Text(
@@ -916,7 +930,6 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   }
 }
 
-// Widget auxiliar para os badges do Pie Chart (mantido igual)
 class _Badge extends StatelessWidget {
   const _Badge(
       this.text, {

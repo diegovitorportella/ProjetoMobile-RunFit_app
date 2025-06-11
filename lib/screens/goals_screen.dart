@@ -10,6 +10,7 @@ import 'package:runfit_app/utils/app_styles.dart';
 import 'package:runfit_app/utils/app_constants.dart';
 import 'package:runfit_app/services/goal_service.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <--- ADICIONE ESTA LINHA
 
 
 class GoalsScreen extends StatefulWidget {
@@ -28,8 +29,19 @@ class _GoalsScreenState extends State<GoalsScreen> {
   @override
   void initState() {
     super.initState();
-    _goalService.initializeGoals();
-    _goalsStream = FirebaseDatabase.instance.ref('users/${FirebaseConstants.userId}/goals').onValue;
+    final user = FirebaseAuth.instance.currentUser; // Obtém o usuário logado
+    if (user != null) {
+      // Inicializa o stream com o UID do usuário logado
+      _goalsStream = FirebaseDatabase.instance.ref('users/${user.uid}/goals').onValue;
+      _goalService.initializeGoals(); // Garante que o GoalService esteja inicializado com o UID correto
+    } else {
+      // Se não houver usuário logado, o stream não pode ser inicializado com um UID.
+      // Defina um stream vazio ou lide com o erro de outra forma.
+      _goalsStream = const Stream.empty();
+      // ignore: avoid_print
+      print('GoalsScreen: Usuário não logado. Metas não serão carregadas em tempo real.');
+      // Opcional: Redirecionar para login ou mostrar mensagem
+    }
   }
 
   void _showGoalFormModal({Goal? goal}) async {
@@ -54,9 +66,8 @@ class _GoalsScreenState extends State<GoalsScreen> {
           return [GoalUnit.times];
         case GoalType.workoutSheetCompletion:
           return [GoalUnit.none];
-      // Adicionando um caso default para garantir que todos os GoalType são tratados
         default:
-          return [GoalUnit.none]; // Retorno padrão se um novo GoalType for adicionado e não tratado
+          return [GoalUnit.none];
       }
     }
 
@@ -199,7 +210,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                                             ? []
                                             : _getUnitsForGoalType(selectedType!).map((unit) {
                                           String formattedUnit;
-                                          switch (unit) { // <--- CORRIGIDO AQUI: CASES DEVEM SER MEMBROS DE GOALUNIT
+                                          switch (unit) {
                                             case GoalUnit.km:
                                               formattedUnit = 'Km';
                                               break;
@@ -215,21 +226,20 @@ class _GoalsScreenState extends State<GoalsScreen> {
                                             case GoalUnit.hours:
                                               formattedUnit = 'Horas';
                                               break;
-                                            case GoalUnit.kg: // <--- CORRIGIDO
+                                            case GoalUnit.kg:
                                               formattedUnit = 'Kg';
                                               break;
-                                            case GoalUnit.lbs: // <--- CORRIGIDO
+                                            case GoalUnit.lbs:
                                               formattedUnit = 'Lbs';
                                               break;
-                                            case GoalUnit.times: // <--- CORRIGIDO
+                                            case GoalUnit.times:
                                               formattedUnit = 'Vezes';
                                               break;
                                             case GoalUnit.none:
                                               formattedUnit = 'N/A';
                                               break;
-                                          // Adicionar um default ou cobrir todos os casos possíveis do enum
-                                            default: // <--- ADICIONADO PARA TRATAR O ERRO DE NÃO-EXAUSTÃO (se houver)
-                                              formattedUnit = unit.name; // Retorno o nome do enum como fallback
+                                            default:
+                                              formattedUnit = unit.name;
                                               break;
                                           }
                                           return DropdownMenuItem(

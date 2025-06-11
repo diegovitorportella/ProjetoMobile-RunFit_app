@@ -32,11 +32,6 @@ enum UserGender {
   naoInformar,
 }
 
-// ID de Usuário Fixo para o Firebase
-class FirebaseConstants {
-  static const String userId = 'default_user';
-}
-
 
 // Chaves para SharedPreferences (Mantenha todas estas chaves ativas por enquanto)
 class SharedPreferencesKeys {

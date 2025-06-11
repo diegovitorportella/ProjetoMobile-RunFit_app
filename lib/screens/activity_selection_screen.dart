@@ -34,7 +34,7 @@ class _ActivitySelectionScreenState extends State<ActivitySelectionScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Qual modalidade você praticou?', // Texto ajustado
+              'Qual modalidade você quer registrar?', // Texto ajustado
               style: AppStyles.headingStyle,
             ),
             const SizedBox(height: 24),

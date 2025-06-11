@@ -4,13 +4,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:runfit_app/data/models/achievement.dart';
-import 'package:runfit_app/utils/app_constants.dart'; // Para SharedPreferencesKeys, enums e FirebaseConstants
-// Importação do Firebase Realtime Database
-import 'package:firebase_database/firebase_database.dart'; // <--- ADICIONE ESTA LINHA
-
+import 'package:runfit_app/utils/app_constants.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class AchievementService {
-  // Singleton Pattern
   static final AchievementService _instance = AchievementService._internal();
 
   factory AchievementService() {
@@ -19,127 +17,133 @@ class AchievementService {
 
   AchievementService._internal();
 
-  // Referência ao banco de dados para as conquistas do usuário específico
-  // A estrutura será: /users/{userId}/achievements
-  late DatabaseReference _userAchievementsRef; // <--- MUDANÇA AQUI: Será inicializada
+  // Tornar as referências anuláveis
+  DatabaseReference? _userAchievementsRef;
+  DatabaseReference? _totalWorkoutsRef;
+  DatabaseReference? _weightliftingWorkoutsRef;
+  DatabaseReference? _runningWorkoutsRef;
 
-  // Referências para os contadores no Firebase
-  late DatabaseReference _totalWorkoutsRef; // <--- ADICIONE
-  late DatabaseReference _weightliftingWorkoutsRef; // <--- ADICIONE
-  late DatabaseReference _runningWorkoutsRef; // <--- ADICIONE
+  List<Achievement> _allAchievements = [];
 
-
-  // Lista interna de todas as conquistas possíveis (base de dados de conquistas)
-  List<Achievement> _allAchievements = []; // Agora carregada do Firebase, mas ainda com defaults
-
-
-  // Método para inicializar e carregar as conquistas
   Future<void> initializeAchievements() async {
-    // Inicializa as referências do Firebase com o userId fixo
-    _userAchievementsRef = FirebaseDatabase.instance.ref('users/${FirebaseConstants.userId}/achievements'); // <--- MUDANÇA AQUI
-    _totalWorkoutsRef = FirebaseDatabase.instance.ref('users/${FirebaseConstants.userId}/counters/totalWorkoutsCompleted'); // <--- ADICIONE
-    _weightliftingWorkoutsRef = FirebaseDatabase.instance.ref('users/${FirebaseConstants.userId}/counters/weightliftingWorkoutsCompleted'); // <--- ADICIONE
-    _runningWorkoutsRef = FirebaseDatabase.instance.ref('users/${FirebaseConstants.userId}/counters/runningWorkoutsCompleted'); // <--- ADICIONE
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      _userAchievementsRef = FirebaseDatabase.instance.ref('users/${user.uid}/achievements');
+      _totalWorkoutsRef = FirebaseDatabase.instance.ref('users/${user.uid}/counters/totalWorkoutsCompleted');
+      _weightliftingWorkoutsRef = FirebaseDatabase.instance.ref('users/${user.uid}/counters/weightliftingWorkoutsCompleted');
+      _runningWorkoutsRef = FirebaseDatabase.instance.ref('users/${user.uid}/counters/runningWorkoutsCompleted');
 
+      List<Achievement> defaultAchievements = [
+        Achievement(
+          id: 'first_workout_completed',
+          title: 'Primeiro Treino Concluído!',
+          description: 'Parabéns por completar seu primeiro treino!',
+          icon: Icons.emoji_events,
+        ),
+        Achievement(
+          id: 'master_weightlifting',
+          title: 'Mestre da Musculação!',
+          description: 'Complete 5 treinos de musculação para se tornar um mestre.',
+          icon: Icons.fitness_center,
+        ),
+        Achievement(
+          id: 'champion_running',
+          title: 'Campeão da Corrida!',
+          description: 'Complete 5 treinos de corrida para se tornar um campeão.',
+          icon: Icons.run_circle,
+        ),
+        Achievement(
+          id: 'consistent_week',
+          title: 'Semana Consistente!',
+          description: 'Conclua todos os treinos da sua meta semanal.',
+          icon: Icons.calendar_today,
+        ),
+        Achievement(
+          id: 'ten_workouts_done',
+          title: 'Veterano do Treino!',
+          description: 'Complete 10 treinos no total.',
+          icon: Icons.star,
+        ),
+        Achievement(
+          id: 'twenty_workouts_done',
+          title: 'Super Atleta!',
+          description: 'Complete 20 treinos no total.',
+          icon: Icons.local_fire_department,
+        ),
+      ];
 
-    // Defina todas as suas conquistas fixas aqui com IDs únicos
-    List<Achievement> defaultAchievements = [
-      Achievement(
-        id: 'first_workout_completed',
-        title: 'Primeiro Treino Concluído!',
-        description: 'Parabéns por completar seu primeiro treino!',
-        icon: Icons.emoji_events,
-      ),
-      Achievement(
-        id: 'master_weightlifting',
-        title: 'Mestre da Musculação!',
-        description: 'Complete 5 treinos de musculação para se tornar um mestre.',
-        icon: Icons.fitness_center,
-      ),
-      Achievement(
-        id: 'champion_running',
-        title: 'Campeão da Corrida!',
-        description: 'Complete 5 treinos de corrida para se tornar um campeão.',
-        icon: Icons.run_circle,
-      ),
-      Achievement(
-        id: 'consistent_week',
-        title: 'Semana Consistente!',
-        description: 'Conclua todos os treinos da sua meta semanal.',
-        icon: Icons.calendar_today,
-      ),
-      Achievement(
-        id: 'ten_workouts_done',
-        title: 'Veterano do Treino!',
-        description: 'Complete 10 treinos no total.',
-        icon: Icons.star,
-      ),
-      Achievement(
-        id: 'twenty_workouts_done',
-        title: 'Super Atleta!',
-        description: 'Complete 20 treinos no total.',
-        icon: Icons.local_fire_department,
-      ),
-      // Adicione mais conquistas aqui conforme necessário
-    ];
+      try {
+        final snapshot = await _userAchievementsRef!.once(); // Acessar com ! após verificar null
+        final dynamic storedAchievementsData = snapshot.snapshot.value;
 
-    // Tenta carregar conquistas do Firebase
-    final snapshot = await _userAchievementsRef.once(); // <--- MUDANÇA AQUI
-    final dynamic storedAchievementsData = snapshot.snapshot.value; // <--- MUDANÇA AQUI
+        if (storedAchievementsData != null && storedAchievementsData is Map) {
+          List<Achievement> loadedAchievements = [];
+          storedAchievementsData.forEach((key, value) {
+            loadedAchievements.add(Achievement.fromJson(Map<String, dynamic>.from(value)));
+          });
+          _allAchievements = loadedAchievements;
 
-    if (storedAchievementsData != null && storedAchievementsData is Map) {
-      // Se houver conquistas salvas no Firebase, carregue-as
-      List<Achievement> loadedAchievements = [];
-      // Firebase Realtime Database retorna mapas aninhados como LinkedMap<Object?, Object?>
-      // É preciso garantir que eles sejam Map<String, dynamic> para o fromJson.
-      storedAchievementsData.forEach((key, value) {
-        loadedAchievements.add(Achievement.fromJson(Map<String, dynamic>.from(value))); // <--- MUDANÇA AQUI
-      });
-      _allAchievements = loadedAchievements;
-
-      // Mesclar com as conquistas padrão para adicionar novas ou atualizar existentes
-      for (var defaultAch in defaultAchievements) {
-        final existingAchIndex = _allAchievements.indexWhere((ach) => ach.id == defaultAch.id);
-        if (existingAchIndex == -1) {
-          _allAchievements.add(defaultAch);
+          for (var defaultAch in defaultAchievements) {
+            final existingAchIndex = _allAchievements.indexWhere((ach) => ach.id == defaultAch.id);
+            if (existingAchIndex == -1) {
+              _allAchievements.add(defaultAch);
+            } else {
+              final existingAch = _allAchievements[existingAchIndex];
+              _allAchievements[existingAchIndex] = Achievement(
+                id: defaultAch.id,
+                title: defaultAch.title,
+                description: defaultAch.description,
+                icon: defaultAch.icon,
+                isUnlocked: existingAch.isUnlocked,
+                unlockedDate: existingAch.unlockedDate,
+              );
+            }
+          }
         } else {
-          // Opcional: Atualizar descrição ou ícone de conquistas existentes se eles mudarem
-          final existingAch = _allAchievements[existingAchIndex];
-          _allAchievements[existingAchIndex] = Achievement(
-            id: defaultAch.id,
-            title: defaultAch.title,
-            description: defaultAch.description,
-            icon: defaultAch.icon,
-            isUnlocked: existingAch.isUnlocked, // Mantém o status de desbloqueio
-            unlockedDate: existingAch.unlockedDate, // Mantém a data de desbloqueio
-          );
+          _allAchievements = defaultAchievements;
+          await _saveAchievements();
         }
+      } catch (e) {
+        // ignore: avoid_print
+        print('Erro ao carregar ou salvar conquistas padrão: $e');
+        _allAchievements = defaultAchievements; // fallback para defaults se houver erro no Firebase
       }
     } else {
-      // Se não houver conquistas salvas no Firebase, use as conquistas padrão e salve-as
-      _allAchievements = defaultAchievements;
-      await _saveAchievements(); // Salva as conquistas padrão no Firebase pela primeira vez // <--- MUDANÇA AQUI
+      // Se não houver usuário logado, defina as referências como null
+      _userAchievementsRef = null;
+      _totalWorkoutsRef = null;
+      _weightliftingWorkoutsRef = null;
+      _runningWorkoutsRef = null;
+      _allAchievements = []; // Limpa conquistas em memória
+      // ignore: avoid_print
+      print('AchievementService: Usuário não logado. Conquistas não serão carregadas/salvas no Firebase.');
     }
   }
 
-  // Retorna a lista de conquistas
   List<Achievement> getAchievements() {
     return List.from(_allAchievements);
   }
 
-  // Salva a lista atual de conquistas no Firebase
   Future<void> _saveAchievements() async {
-    // Converte a lista de conquistas para um mapa onde a chave é o ID da conquista
+    if (_userAchievementsRef == null) {
+      // ignore: avoid_print
+      print('AchievementService: Não é possível salvar conquistas sem usuário logado.');
+      return;
+    }
     Map<String, dynamic> achievementsMap = {};
     for (var ach in _allAchievements) {
       achievementsMap[ach.id] = ach.toJson();
     }
-    await _userAchievementsRef.set(achievementsMap); // <--- MUDANÇA AQUI
+    await _userAchievementsRef!.set(achievementsMap); // Acessar com !
   }
 
-  // Desbloqueia uma conquista específica e a salva
-  // Retorna a conquista desbloqueada se foi um novo desbloqueio, ou null.
   Future<Achievement?> unlockAchievement(String achievementId) async {
+    if (_userAchievementsRef == null) {
+      // ignore: avoid_print
+      print('AchievementService: Não é possível desbloquear conquista sem usuário logado.');
+      return null;
+    }
+
     final achievementIndex = _allAchievements.indexWhere((ach) => ach.id == achievementId);
     if (achievementIndex != -1 && !_allAchievements[achievementIndex].isUnlocked) {
       final unlockedAchievement = _allAchievements[achievementIndex].copyWith(
@@ -147,49 +151,75 @@ class AchievementService {
         unlockedDate: DateTime.now(),
       );
       _allAchievements[achievementIndex] = unlockedAchievement;
-      await _saveAchievements(); // Salva no Firebase // <--- MUDANÇA AQUI
+      await _saveAchievements();
       return unlockedAchievement;
     }
     return null;
   }
 
-  // Métodos para incrementar contadores (agora no Firebase)
   Future<void> incrementTotalWorkoutsCompleted() async {
-    final snapshot = await _totalWorkoutsRef.once();
+    if (_totalWorkoutsRef == null) {
+      // ignore: avoid_print
+      print('AchievementService: Não é possível incrementar contador sem usuário logado.');
+      return;
+    }
+    final snapshot = await _totalWorkoutsRef!.once(); // Acessar com !
     int count = (snapshot.snapshot.value as int?) ?? 0;
-    await _totalWorkoutsRef.set(count + 1); // <--- MUDANÇA AQUI
+    await _totalWorkoutsRef!.set(count + 1); // Acessar com !
   }
 
   Future<void> incrementWeightliftingWorkoutsCompleted() async {
-    final snapshot = await _weightliftingWorkoutsRef.once();
+    if (_weightliftingWorkoutsRef == null) {
+      // ignore: avoid_print
+      print('AchievementService: Não é possível incrementar contador sem usuário logado.');
+      return;
+    }
+    final snapshot = await _weightliftingWorkoutsRef!.once(); // Acessar com !
     int count = (snapshot.snapshot.value as int?) ?? 0;
-    await _weightliftingWorkoutsRef.set(count + 1); // <--- MUDANÇA AQUI
+    await _weightliftingWorkoutsRef!.set(count + 1); // Acessar com !
   }
 
   Future<void> incrementRunningWorkoutsCompleted() async {
-    final snapshot = await _runningWorkoutsRef.once();
+    if (_runningWorkoutsRef == null) {
+      // ignore: avoid_print
+      print('AchievementService: Não é possível incrementar contador sem usuário logado.');
+      return;
+    }
+    final snapshot = await _runningWorkoutsRef!.once(); // Acessar com !
     int count = (snapshot.snapshot.value as int?) ?? 0;
-    await _runningWorkoutsRef.set(count + 1); // <--- MUDANÇA AQUI
+    await _runningWorkoutsRef!.set(count + 1); // Acessar com !
   }
 
-  // Métodos para obter os contadores (do Firebase)
   Future<int> getTotalWorkoutsCompleted() async {
-    final snapshot = await _totalWorkoutsRef.once();
-    return (snapshot.snapshot.value as int?) ?? 0; // <--- OBTÉM DO FIREBASE
+    if (_totalWorkoutsRef == null) {
+      // ignore: avoid_print
+      print('AchievementService: Não é possível obter contador sem usuário logado.');
+      return 0;
+    }
+    final snapshot = await _totalWorkoutsRef!.once(); // Acessar com !
+    return (snapshot.snapshot.value as int?) ?? 0;
   }
 
   Future<int> getWeightliftingWorkoutsCompleted() async {
-    final snapshot = await _weightliftingWorkoutsRef.once();
-    return (snapshot.snapshot.value as int?) ?? 0; // <--- OBTÉM DO FIREBASE
+    if (_weightliftingWorkoutsRef == null) {
+      // ignore: avoid_print
+      print('AchievementService: Não é possível obter contador sem usuário logado.');
+      return 0;
+    }
+    final snapshot = await _weightliftingWorkoutsRef!.once(); // Acessar com !
+    return (snapshot.snapshot.value as int?) ?? 0;
   }
 
   Future<int> getRunningWorkoutsCompleted() async {
-    final snapshot = await _runningWorkoutsRef.once();
-    return (snapshot.snapshot.value as int?) ?? 0; // <--- OBTÉM DO FIREBASE
+    if (_runningWorkoutsRef == null) {
+      // ignore: avoid_print
+      print('AchievementService: Não é possível obter contador sem usuário logado.');
+      return 0;
+    }
+    final snapshot = await _runningWorkoutsRef!.once(); // Acessar com !
+    return (snapshot.snapshot.value as int?) ?? 0;
   }
 
-
-  /// NOVO MÉTODO: Centraliza a notificação de treino concluído e retorna a conquista desbloqueada (se houver)
   Future<Achievement?> notifyWorkoutCompleted(String modality) async {
     await incrementTotalWorkoutsCompleted();
 
@@ -198,33 +228,27 @@ class AchievementService {
     } else if (modality.toLowerCase() == WorkoutModality.corrida.name.toLowerCase()) {
       await incrementRunningWorkoutsCompleted();
     }
-    // Chame a verificação de conquistas após atualizar os contadores
     return await checkAndUnlockAchievements(modality);
   }
 
-
-  // Método para verificar e desbloquear conquistas com base nos contadores
   Future<Achievement?> checkAndUnlockAchievements(String? modality) async {
-    // Não precisamos mais de SharedPreferences para contadores aqui, pois já estamos obtendo do Firebase
     Achievement? unlockedAchievement;
 
-    // 1. Conquista de Primeiro Treino Concluído
-    final totalWorkouts = await getTotalWorkoutsCompleted(); // <--- OBTÉM DO FIREBASE
+    final totalWorkouts = await getTotalWorkoutsCompleted();
     if (totalWorkouts >= 1) {
       final result = await unlockAchievement('first_workout_completed');
       if (result != null) unlockedAchievement = result;
     }
 
-    // 2. Conquistas de Modalidade (Mestre da Musculação / Campeão da Corrida)
     if (modality != null) {
       if (modality.toLowerCase() == WorkoutModality.musculacao.name.toLowerCase()) {
-        final weightliftingWorkouts = await getWeightliftingWorkoutsCompleted(); // <--- OBTÉM DO FIREBASE
+        final weightliftingWorkouts = await getWeightliftingWorkoutsCompleted();
         if (weightliftingWorkouts >= 5) {
           final result = await unlockAchievement('master_weightlifting');
           if (result != null && unlockedAchievement == null) unlockedAchievement = result;
         }
       } else if (modality.toLowerCase() == WorkoutModality.corrida.name.toLowerCase()) {
-        final runningWorkouts = await getRunningWorkoutsCompleted(); // <--- OBTÉM DO FIREBASE
+        final runningWorkouts = await getRunningWorkoutsCompleted();
         if (runningWorkouts >= 5) {
           final result = await unlockAchievement('champion_running');
           if (result != null && unlockedAchievement == null) unlockedAchievement = result;
@@ -232,7 +256,6 @@ class AchievementService {
       }
     }
 
-    // 3. Conquistas de Total de Treinos
     if (totalWorkouts >= 10) {
       final result = await unlockAchievement('ten_workouts_done');
       if (result != null && unlockedAchievement == null) unlockedAchievement = result;
@@ -242,13 +265,11 @@ class AchievementService {
       if (result != null && unlockedAchievement == null) unlockedAchievement = result;
     }
 
-    // A conquista 'Primeira Semana Consistente' será checada no reset semanal na HomeScreen
     return unlockedAchievement;
   }
 
-  // Chamado durante o reset semanal na HomeScreen
   Future<Achievement?> checkConsistentWeekAchievement() async {
-    final prefs = await SharedPreferences.getInstance(); // Ainda usa SharedPreferences para metas semanais
+    final prefs = await SharedPreferences.getInstance();
     final targetWorkouts = prefs.getInt(SharedPreferencesKeys.targetWorkoutsThisWeek) ?? 0;
     final completedWorkouts = prefs.getInt(SharedPreferencesKeys.completedWorkoutsThisWeek) ?? 0;
 
@@ -258,24 +279,27 @@ class AchievementService {
     return null;
   }
 
-  // Método para resetar todos os dados de conquistas e contadores (útil para testes)
   Future<void> resetAllAchievementData() async {
-    // Remove os dados do SharedPreferences (apenas o que estava lá)
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(SharedPreferencesKeys.achievementsList); // Não usado mais para conquistas
-    await prefs.remove(SharedPreferencesKeys.totalWorkoutsCompleted); // Não usado mais para contadores
+    await prefs.remove(SharedPreferencesKeys.achievementsList);
+    await prefs.remove(SharedPreferencesKeys.totalWorkoutsCompleted);
     await prefs.remove(SharedPreferencesKeys.weightliftingWorkoutsCompleted);
     await prefs.remove(SharedPreferencesKeys.runningWorkoutsCompleted);
 
-    // Remove os dados do Firebase
-    await _userAchievementsRef.remove(); // Remove todas as conquistas do usuário no Firebase
-    await _totalWorkoutsRef.remove(); // Remove o contador total
-    await _weightliftingWorkoutsRef.remove(); // Remove o contador de musculação
-    await _runningWorkoutsRef.remove(); // Remove o contador de corrida
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseDatabase.instance.ref('users/${user.uid}/achievements').remove();
+      await FirebaseDatabase.instance.ref('users/${user.uid}/counters/totalWorkoutsCompleted').remove();
+      await FirebaseDatabase.instance.ref('users/${user.uid}/counters/weightliftingWorkoutsCompleted').remove();
+      await FirebaseDatabase.instance.ref('users/${user.uid}/counters/runningWorkoutsCompleted').remove();
+    } else {
+      // ignore: avoid_print
+      print('Não é possível resetar dados de conquistas no Firebase: Usuário não logado.');
+    }
 
-    // Reinicializa as conquistas (irá carregar as padrão e salvá-las no Firebase)
+    // Após resetar, re-inicializa as conquistas (irá carregar as padrão e salvá-las no Firebase se houver usuário)
     await initializeAchievements();
-    _allAchievements.clear(); // Limpa a lista em memória para garantir
+    _allAchievements.clear();
     // ignore: avoid_print
     print('Todos os dados de conquistas e contadores foram resetados (Firebase e SharedPreferences).');
   }

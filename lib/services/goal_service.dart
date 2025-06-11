@@ -3,9 +3,9 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:runfit_app/data/models/goal.dart';
-import 'package:runfit_app/utils/app_constants.dart'; // Para SharedPreferencesKeys, enums e FirebaseConstants
-// Importação do Firebase Realtime Database
-import 'package:firebase_database/firebase_database.dart'; // <--- ADICIONE ESTA LINHA
+import 'package:runfit_app/utils/app_constants.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 
 class GoalService {
@@ -19,33 +19,43 @@ class GoalService {
   GoalService._internal();
 
   // Referência ao banco de dados para as metas do usuário específico
-  // A estrutura será: /users/{userId}/goals
-  late DatabaseReference _userGoalsRef; // <--- MUDANÇA AQUI: Será inicializada
+  // Tornar a referência anulável
+  DatabaseReference? _userGoalsRef;
 
 
   List<Goal> _userGoals = [];
 
   // Método para inicializar e carregar as metas
   Future<void> initializeGoals() async {
-    // Inicializa a referência do Firebase com o userId fixo
-    _userGoalsRef = FirebaseDatabase.instance.ref('users/${FirebaseConstants.userId}/goals'); // <--- MUDANÇA AQUI
-    await _loadGoals();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      _userGoalsRef = FirebaseDatabase.instance.ref('users/${user.uid}/goals');
+      await _loadGoals();
+    } else {
+      // Se não houver usuário logado, defina a referência como null
+      _userGoalsRef = null;
+      _userGoals = []; // Limpa metas em memória
+      // ignore: avoid_print
+      print('GoalService: Usuário não logado. Metas não serão carregadas/salvas no Firebase.');
+    }
   }
 
   // Carrega as metas do Firebase (não mais do SharedPreferences)
   Future<void> _loadGoals() async {
-    // final prefs = await SharedPreferences.getInstance(); // Não precisa mais
-    // final String? goalsJson = prefs.getString(SharedPreferencesKeys.userGoalsList); // Não precisa mais
+    // Adicione a verificação de nulidade antes de usar a referência
+    if (_userGoalsRef == null) {
+      // ignore: avoid_print
+      print('GoalService: Não é possível carregar metas sem usuário logado.');
+      return;
+    }
 
-    final snapshot = await _userGoalsRef.once(); // <--- MUDANÇA AQUI
-    final dynamic goalsData = snapshot.snapshot.value; // <--- MUDANÇA AQUI
+    final snapshot = await _userGoalsRef!.once(); // Use '!' após verificar null
+    final dynamic goalsData = snapshot.snapshot.value;
 
     if (goalsData != null && goalsData is Map) {
-      // Firebase Realtime Database retorna mapas aninhados como LinkedMap<Object?, Object?>
-      // É preciso garantir que eles sejam Map<String, dynamic> para o fromJson.
       List<Goal> loadedGoals = [];
       goalsData.forEach((key, value) {
-        loadedGoals.add(Goal.fromJson(Map<String, dynamic>.from(value))); // <--- MUDANÇA AQUI
+        loadedGoals.add(Goal.fromJson(Map<String, dynamic>.from(value)));
       });
       _userGoals = loadedGoals;
     } else {
@@ -55,25 +65,35 @@ class GoalService {
 
   // Salva a lista atual de metas no Firebase (não mais no SharedPreferences)
   Future<void> _saveGoals() async {
-    // final prefs = await SharedPreferences.getInstance(); // Não precisa mais
-    // final String jsonString = jsonEncode(_userGoals.map((goal) => goal.toJson()).toList()); // Não precisa mais
-    // await prefs.setString(SharedPreferencesKeys.userGoalsList, jsonString); // Não precisa mais
+    // Adicione a verificação de nulidade antes de usar a referência
+    if (_userGoalsRef == null) {
+      // ignore: avoid_print
+      print('GoalService: Não é possível salvar metas sem usuário logado.');
+      return;
+    }
 
-    // Converte a lista de metas para um mapa onde a chave é o ID da meta
     Map<String, dynamic> goalsMap = {};
     for (var goal in _userGoals) {
       goalsMap[goal.id] = goal.toJson();
     }
-    await _userGoalsRef.set(goalsMap); // <--- MUDANÇA AQUI
+    await _userGoalsRef!.set(goalsMap); // Use '!' após verificar null
   }
 
   // Retorna uma cópia da lista de metas
   List<Goal> getGoals() {
+    // Mesmo que a referência seja nula, a lista em memória pode ser retornada (vazia)
     return List.from(_userGoals);
   }
 
   // Adiciona ou atualiza uma meta
   Future<void> addOrUpdateGoal(Goal newGoal) async {
+    // Adicione a verificação de nulidade antes de prosseguir
+    if (_userGoalsRef == null) {
+      // ignore: avoid_print
+      print('GoalService: Não é possível adicionar/atualizar meta sem usuário logado.');
+      return;
+    }
+
     final int index = _userGoals.indexWhere((g) => g.id == newGoal.id);
     if (index != -1) {
       _userGoals[index] = newGoal;
@@ -85,6 +105,13 @@ class GoalService {
 
   // Remove uma meta
   Future<void> deleteGoal(String goalId) async {
+    // Adicione a verificação de nulidade antes de prosseguir
+    if (_userGoalsRef == null) {
+      // ignore: avoid_print
+      print('GoalService: Não é possível deletar meta sem usuário logado.');
+      return;
+    }
+
     _userGoals.removeWhere((g) => g.id == goalId);
     await _saveGoals();
   }
@@ -96,10 +123,17 @@ class GoalService {
     double? distanceKm,
     String? completedWorkoutSheetId,
   }) async {
+    // Adicione a verificação de nulidade antes de prosseguir
+    if (_userGoalsRef == null) {
+      // ignore: avoid_print
+      print('GoalService: Não é possível atualizar progresso de metas sem usuário logado.');
+      return [];
+    }
+
     List<Goal> newlyCompletedGoals = [];
 
     // Recarrega as metas para garantir que estão atualizadas
-    await _loadGoals();
+    await _loadGoals(); // _loadGoals já tem a verificação interna
 
     for (int i = 0; i < _userGoals.length; i++) {
       Goal goal = _userGoals[i];
@@ -142,7 +176,7 @@ class GoalService {
       _userGoals[i] = updatedGoal;
     }
 
-    await _saveGoals(); // Salva as metas atualizadas no Firebase
+    await _saveGoals(); // _saveGoals já tem a verificação interna
     return newlyCompletedGoals;
   }
 

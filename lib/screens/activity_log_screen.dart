@@ -4,17 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:convert';
-// Importação do Firebase Realtime Database
-import 'package:firebase_database/firebase_database.dart'; // <--- ADICIONE ESTA LINHA
+import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:runfit_app/utils/app_colors.dart';
 import 'package:runfit_app/utils/app_styles.dart';
 import 'package:runfit_app/utils/app_constants.dart';
 import 'package:runfit_app/data/models/activity_history_entry.dart';
 import 'package:runfit_app/services/achievement_service.dart';
-import 'package:runfit_app/data/models/achievement.dart'; // Importar modelo de Conquista
-import 'package:runfit_app/services/goal_service.dart'; // NOVO: Importar GoalService
-import 'package:runfit_app/data/models/goal.dart'; // NOVO: Importar modelo Goal
+import 'package:runfit_app/data/models/achievement.dart';
+import 'package:runfit_app/services/goal_service.dart';
+import 'package:runfit_app/data/models/goal.dart';
 
 class ActivityLogScreen extends StatefulWidget {
   final String? selectedModality;
@@ -40,13 +40,22 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
   final AchievementService _achievementService = AchievementService();
   final GoalService _goalService = GoalService();
 
-  // Referência ao banco de dados Realtime Database
-  final DatabaseReference _activitiesRef = FirebaseDatabase.instance.ref('activities'); // <--- ADICIONE ESTA LINHA
+  DatabaseReference? _userActivitiesRef; // Tornar anulável
 
   @override
   void initState() {
     super.initState();
     _currentModality = widget.selectedModality ?? WorkoutModality.musculacao.name;
+    final user = FirebaseAuth.instance.currentUser; // Obter o usuário logado
+    if (user != null) {
+      _userActivitiesRef = FirebaseDatabase.instance.ref('users/${user.uid}/activities'); // Inicializar com UID
+    } else {
+      // Se não houver usuário logado
+      // ignore: avoid_print
+      print('ActivityLogScreen: Usuário não logado. Atividades não serão salvas no Firebase.');
+      // Opcional: Aqui você pode exibir um alerta e navegar para a tela de login
+      // ou desabilitar a funcionalidade de log.
+    }
   }
 
   @override
@@ -232,23 +241,45 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
     });
   }
 
-  // Função para salvar uma atividade no Firebase Realtime Database
-  Future<void> _saveActivityToFirebase(ActivityHistoryEntry newEntry) async { // <--- ADICIONE ESTA FUNÇÃO
+  Future<void> _saveActivityToFirebase(ActivityHistoryEntry newEntry) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      // ignore: avoid_print
+      print('Erro: Usuário não logado ao tentar salvar atividade.');
+      return;
+    }
+    if (_userActivitiesRef == null) { // Adicione esta verificação
+      // ignore: avoid_print
+      print('ActivityLogScreen: _userActivitiesRef é null, não salvando atividade no Firebase.');
+      return;
+    }
     try {
-      final newActivityKey = _activitiesRef.push().key; // Gera um ID único
+      final newActivityKey = _userActivitiesRef!.push().key; // Use '!' após verificar null
 
       if (newActivityKey != null) {
-        await _activitiesRef.child(newActivityKey).set(newEntry.toJson());
-        // print('Atividade salva no Firebase com a chave: $newActivityKey'); // Opcional para depuração
+        await _userActivitiesRef!.child(newActivityKey).set(newEntry.toJson()); // Use '!' após verificar null
       }
     } catch (e) {
+      // ignore: avoid_print
       print('Erro ao salvar atividade no Firebase: $e');
-      // Considere adicionar feedback ao usuário aqui
     }
   }
 
 
   Future<void> _saveActivity() async {
+    // Verificar se o usuário está logado antes de salvar
+    if (FirebaseAuth.instance.currentUser == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Por favor, faça login para registrar suas atividades.', style: AppStyles.smallTextStyle),
+            backgroundColor: AppColors.errorColor,
+          ),
+        );
+      }
+      return;
+    }
+
     if (_formKey.currentState!.validate()) {
       if (_currentModality == WorkoutModality.musculacao.name && _loggedExercises.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -282,7 +313,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
       historyJsonList.add(json.encode(newEntry.toJson()));
       await prefs.setStringList(SharedPreferencesKeys.activityHistory, historyJsonList);
 
-      // Salva no Firebase Realtime Database // <--- CHAMADA AQUI!
+      // Salva no Firebase Realtime Database
       await _saveActivityToFirebase(newEntry);
 
 
@@ -319,6 +350,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
   }
 
   void _showAchievementUnlockedDialog(Achievement achievement) {
+    if (!mounted) return;
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -357,6 +389,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
   }
 
   void _showGoalCompletedDialog(Goal goal) {
+    if (!mounted) return;
     showDialog(
       context: context,
       builder: (BuildContext context) {
