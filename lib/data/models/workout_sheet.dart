@@ -8,7 +8,7 @@ class Exercise {
   final String setsReps;
   final String? notes;
   final String? imageUrl; // URL ou path para uma imagem/GIF de demonstração
-  final String? load; // NOVO CAMPO: Para armazenar a carga (ex: "10kg", "5lb", "Peso Corporal")
+  final String? load; // NOVO CAMPO: Para armazenar a carga (ex: "20kg", "5lb", "BW" (bodyweight))
   bool isCompleted;
 
   Exercise({
@@ -67,6 +67,7 @@ class WorkoutSheet {
   final List<Exercise> exercises;
   final int? icon; // Novo campo para o codePoint do IconData
   bool isActive;
+  final String? userId; // NOVO CAMPO: Para associar a ficha ao usuário
 
   WorkoutSheet({
     required this.id,
@@ -77,6 +78,7 @@ class WorkoutSheet {
     required this.exercises,
     this.icon,
     this.isActive = false,
+    this.userId, // Adicione ao construtor
   });
 
   // NOVO: Método copyWith para WorkoutSheet
@@ -89,6 +91,7 @@ class WorkoutSheet {
     List<Exercise>? exercises,
     int? icon,
     bool? isActive,
+    String? userId, // Adicione ao copyWith
   }) {
     return WorkoutSheet(
       id: id ?? this.id,
@@ -99,6 +102,7 @@ class WorkoutSheet {
       exercises: exercises ?? this.exercises,
       icon: icon ?? this.icon,
       isActive: isActive ?? this.isActive,
+      userId: userId ?? this.userId, // Adicione ao copyWith
     );
   }
 
@@ -111,6 +115,7 @@ class WorkoutSheet {
     'exercises': exercises.map((e) => e.toJson()).toList(),
     'icon': icon,
     'isActive': isActive,
+    'userId': userId, // Adicione ao toJson
   };
 
   factory WorkoutSheet.fromJson(Map<String, dynamic> json) {
@@ -127,6 +132,7 @@ class WorkoutSheet {
       exercises: exercisesList,
       icon: json['icon'],
       isActive: json['isActive'] ?? false,
+      userId: json['userId'], // Adicione ao fromJson
     );
   }
 }

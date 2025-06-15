@@ -1,6 +1,6 @@
 // lib/services/achievement_service.dart
 
-import 'dart:convert';
+import 'dart:convert'; // Importar para jsonEncode/jsonDecode
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:runfit_app/data/models/achievement.dart';
@@ -73,13 +73,19 @@ class AchievementService {
       ];
 
       try {
-        final snapshot = await _userAchievementsRef!.once(); // Acessar com ! após verificar null
+        final snapshot = await _userAchievementsRef!.once();
         final dynamic storedAchievementsData = snapshot.snapshot.value;
 
         if (storedAchievementsData != null && storedAchievementsData is Map) {
           List<Achievement> loadedAchievements = [];
           storedAchievementsData.forEach((key, value) {
-            loadedAchievements.add(Achievement.fromJson(Map<String, dynamic>.from(value)));
+            try {
+              // AQUI ESTÁ A NOVA ABORDAGEM: Serializar e desserializar
+              final Map<String, dynamic> typedValue = jsonDecode(jsonEncode(value));
+              loadedAchievements.add(Achievement.fromJson(typedValue));
+            } catch (e) {
+              print('Erro ao processar conquista do Firebase (chave: $key): $e, dado: $value');
+            }
           });
           _allAchievements = loadedAchievements;
 
@@ -104,7 +110,6 @@ class AchievementService {
           await _saveAchievements();
         }
       } catch (e) {
-        // ignore: avoid_print
         print('Erro ao carregar ou salvar conquistas padrão: $e');
         _allAchievements = defaultAchievements; // fallback para defaults se houver erro no Firebase
       }
@@ -115,7 +120,6 @@ class AchievementService {
       _weightliftingWorkoutsRef = null;
       _runningWorkoutsRef = null;
       _allAchievements = []; // Limpa conquistas em memória
-      // ignore: avoid_print
       print('AchievementService: Usuário não logado. Conquistas não serão carregadas/salvas no Firebase.');
     }
   }
@@ -126,7 +130,6 @@ class AchievementService {
 
   Future<void> _saveAchievements() async {
     if (_userAchievementsRef == null) {
-      // ignore: avoid_print
       print('AchievementService: Não é possível salvar conquistas sem usuário logado.');
       return;
     }
@@ -134,12 +137,11 @@ class AchievementService {
     for (var ach in _allAchievements) {
       achievementsMap[ach.id] = ach.toJson();
     }
-    await _userAchievementsRef!.set(achievementsMap); // Acessar com !
+    await _userAchievementsRef!.set(achievementsMap);
   }
 
   Future<Achievement?> unlockAchievement(String achievementId) async {
     if (_userAchievementsRef == null) {
-      // ignore: avoid_print
       print('AchievementService: Não é possível desbloquear conquista sem usuário logado.');
       return null;
     }
@@ -159,64 +161,58 @@ class AchievementService {
 
   Future<void> incrementTotalWorkoutsCompleted() async {
     if (_totalWorkoutsRef == null) {
-      // ignore: avoid_print
       print('AchievementService: Não é possível incrementar contador sem usuário logado.');
       return;
     }
-    final snapshot = await _totalWorkoutsRef!.once(); // Acessar com !
+    final snapshot = await _totalWorkoutsRef!.once();
     int count = (snapshot.snapshot.value as int?) ?? 0;
-    await _totalWorkoutsRef!.set(count + 1); // Acessar com !
+    await _totalWorkoutsRef!.set(count + 1);
   }
 
   Future<void> incrementWeightliftingWorkoutsCompleted() async {
     if (_weightliftingWorkoutsRef == null) {
-      // ignore: avoid_print
       print('AchievementService: Não é possível incrementar contador sem usuário logado.');
       return;
     }
-    final snapshot = await _weightliftingWorkoutsRef!.once(); // Acessar com !
+    final snapshot = await _weightliftingWorkoutsRef!.once();
     int count = (snapshot.snapshot.value as int?) ?? 0;
-    await _weightliftingWorkoutsRef!.set(count + 1); // Acessar com !
+    await _weightliftingWorkoutsRef!.set(count + 1);
   }
 
   Future<void> incrementRunningWorkoutsCompleted() async {
     if (_runningWorkoutsRef == null) {
-      // ignore: avoid_print
       print('AchievementService: Não é possível incrementar contador sem usuário logado.');
       return;
     }
-    final snapshot = await _runningWorkoutsRef!.once(); // Acessar com !
+    final snapshot = await _runningWorkoutsRef!.once();
     int count = (snapshot.snapshot.value as int?) ?? 0;
-    await _runningWorkoutsRef!.set(count + 1); // Acessar com !
+    await _runningWorkoutsRef!.set(count + 1);
   }
 
   Future<int> getTotalWorkoutsCompleted() async {
     if (_totalWorkoutsRef == null) {
-      // ignore: avoid_print
       print('AchievementService: Não é possível obter contador sem usuário logado.');
       return 0;
     }
-    final snapshot = await _totalWorkoutsRef!.once(); // Acessar com !
+    final snapshot = await _totalWorkoutsRef!.once();
     return (snapshot.snapshot.value as int?) ?? 0;
   }
 
   Future<int> getWeightliftingWorkoutsCompleted() async {
     if (_weightliftingWorkoutsRef == null) {
-      // ignore: avoid_print
       print('AchievementService: Não é possível obter contador sem usuário logado.');
       return 0;
     }
-    final snapshot = await _weightliftingWorkoutsRef!.once(); // Acessar com !
+    final snapshot = await _weightliftingWorkoutsRef!.once();
     return (snapshot.snapshot.value as int?) ?? 0;
   }
 
   Future<int> getRunningWorkoutsCompleted() async {
     if (_runningWorkoutsRef == null) {
-      // ignore: avoid_print
       print('AchievementService: Não é possível obter contador sem usuário logado.');
       return 0;
     }
-    final snapshot = await _runningWorkoutsRef!.once(); // Acessar com !
+    final snapshot = await _runningWorkoutsRef!.once();
     return (snapshot.snapshot.value as int?) ?? 0;
   }
 
@@ -293,14 +289,12 @@ class AchievementService {
       await FirebaseDatabase.instance.ref('users/${user.uid}/counters/weightliftingWorkoutsCompleted').remove();
       await FirebaseDatabase.instance.ref('users/${user.uid}/counters/runningWorkoutsCompleted').remove();
     } else {
-      // ignore: avoid_print
       print('Não é possível resetar dados de conquistas no Firebase: Usuário não logado.');
     }
 
     // Após resetar, re-inicializa as conquistas (irá carregar as padrão e salvá-las no Firebase se houver usuário)
     await initializeAchievements();
     _allAchievements.clear();
-    // ignore: avoid_print
     print('Todos os dados de conquistas e contadores foram resetados (Firebase e SharedPreferences).');
   }
 }

@@ -9,6 +9,7 @@ import 'package:runfit_app/utils/app_constants.dart'; // Para os enums e extens�
 import 'package:image_picker/image_picker.dart'; // Para seleção de imagem (opcional)
 import 'dart:io'; // Para File (opcional)
 import 'package:flutter/foundation.dart' show kIsWeb; // Para kIsWeb (opcional)
+import 'package:firebase_auth/firebase_auth.dart'; // Importar Firebase Auth
 
 
 class WorkoutSheetFormScreen extends StatefulWidget {
@@ -32,10 +33,13 @@ class _WorkoutSheetFormScreenState extends State<WorkoutSheetFormScreen> {
   late WorkoutLevel _selectedLevel;
   late List<Exercise> _exercises; // Lista de exercícios para esta ficha
   late int _selectedIconCodePoint; // Para o ícone da ficha
+  String? _currentUserId; // Adicionar para armazenar o ID do usuário logado
 
   @override
   void initState() {
     super.initState();
+    _currentUserId = FirebaseAuth.instance.currentUser?.uid; // Obter o ID do usuário logado
+
     if (widget.workoutSheet != null) {
       // Modo Edição
       _sheetId = widget.workoutSheet!.id;
@@ -95,6 +99,16 @@ class _WorkoutSheetFormScreenState extends State<WorkoutSheetFormScreen> {
         return;
       }
 
+      if (_currentUserId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro: Usuário não autenticado. Não é possível salvar a ficha.', style: AppStyles.smallTextStyle),
+            backgroundColor: AppColors.errorColor,
+          ),
+        );
+        return;
+      }
+
       final newWorkoutSheet = WorkoutSheet(
         id: _sheetId,
         name: _nameController.text.trim(),
@@ -104,6 +118,7 @@ class _WorkoutSheetFormScreenState extends State<WorkoutSheetFormScreen> {
         exercises: _exercises.map((e) => e.copyWith(isCompleted: false)).toList(), // Garante que estejam como não concluídos ao criar/salvar
         icon: _selectedIconCodePoint,
         isActive: false, // Fichas criadas/editadas não são ativadas automaticamente
+        userId: _currentUserId, // Atribuir o ID do usuário à ficha
       );
 
       // Retorna a nova ficha para a tela anterior (WorkoutSheetsScreen)

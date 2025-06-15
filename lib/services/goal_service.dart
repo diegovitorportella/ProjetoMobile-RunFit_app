@@ -1,6 +1,6 @@
 // lib/services/goal_service.dart
 
-import 'dart:convert';
+import 'dart:convert'; // Importar para jsonEncode/jsonDecode
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:runfit_app/data/models/goal.dart';
 import 'package:runfit_app/utils/app_constants.dart';
@@ -34,9 +34,8 @@ class GoalService {
     } else {
       // Se não houver usuário logado, defina a referência como null
       _userGoalsRef = null;
-      _userGoals = []; // Limpa metas em memória
-      // ignore: avoid_print
       print('GoalService: Usuário não logado. Metas não serão carregadas/salvas no Firebase.');
+      _userGoals = []; // Limpa metas em memória
     }
   }
 
@@ -44,18 +43,23 @@ class GoalService {
   Future<void> _loadGoals() async {
     // Adicione a verificação de nulidade antes de usar a referência
     if (_userGoalsRef == null) {
-      // ignore: avoid_print
       print('GoalService: Não é possível carregar metas sem usuário logado.');
       return;
     }
 
-    final snapshot = await _userGoalsRef!.once(); // Use '!' após verificar null
+    final snapshot = await _userGoalsRef!.once();
     final dynamic goalsData = snapshot.snapshot.value;
 
     if (goalsData != null && goalsData is Map) {
       List<Goal> loadedGoals = [];
       goalsData.forEach((key, value) {
-        loadedGoals.add(Goal.fromJson(Map<String, dynamic>.from(value)));
+        try {
+          // AQUI ESTÁ A NOVA ABORDAGEM: Serializar e desserializar
+          final Map<String, dynamic> typedValue = jsonDecode(jsonEncode(value));
+          loadedGoals.add(Goal.fromJson(typedValue));
+        } catch (e) {
+          print('Erro ao processar meta do Firebase (chave: $key): $e, dado: $value');
+        }
       });
       _userGoals = loadedGoals;
     } else {
@@ -67,7 +71,6 @@ class GoalService {
   Future<void> _saveGoals() async {
     // Adicione a verificação de nulidade antes de usar a referência
     if (_userGoalsRef == null) {
-      // ignore: avoid_print
       print('GoalService: Não é possível salvar metas sem usuário logado.');
       return;
     }
@@ -76,12 +79,11 @@ class GoalService {
     for (var goal in _userGoals) {
       goalsMap[goal.id] = goal.toJson();
     }
-    await _userGoalsRef!.set(goalsMap); // Use '!' após verificar null
+    await _userGoalsRef!.set(goalsMap);
   }
 
   // Retorna uma cópia da lista de metas
   List<Goal> getGoals() {
-    // Mesmo que a referência seja nula, a lista em memória pode ser retornada (vazia)
     return List.from(_userGoals);
   }
 
@@ -89,7 +91,6 @@ class GoalService {
   Future<void> addOrUpdateGoal(Goal newGoal) async {
     // Adicione a verificação de nulidade antes de prosseguir
     if (_userGoalsRef == null) {
-      // ignore: avoid_print
       print('GoalService: Não é possível adicionar/atualizar meta sem usuário logado.');
       return;
     }
@@ -107,7 +108,6 @@ class GoalService {
   Future<void> deleteGoal(String goalId) async {
     // Adicione a verificação de nulidade antes de prosseguir
     if (_userGoalsRef == null) {
-      // ignore: avoid_print
       print('GoalService: Não é possível deletar meta sem usuário logado.');
       return;
     }
@@ -125,7 +125,6 @@ class GoalService {
   }) async {
     // Adicione a verificação de nulidade antes de prosseguir
     if (_userGoalsRef == null) {
-      // ignore: avoid_print
       print('GoalService: Não é possível atualizar progresso de metas sem usuário logado.');
       return [];
     }

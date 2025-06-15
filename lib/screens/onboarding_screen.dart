@@ -256,7 +256,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       height: double.infinity,
       decoration: BoxDecoration(
         image: DecorationImage(
-          image: AssetImage('assets/images/tela_inicio.png'), // Imagem de fundo similar
+          image: AssetImage('assets/images/jornada.png'), // Imagem de fundo similar
           fit: BoxFit.cover,
           colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.5), BlendMode.darken),
         ),
