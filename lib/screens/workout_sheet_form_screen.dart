@@ -6,9 +6,9 @@ import 'package:runfit_app/data/models/workout_sheet.dart'; // Importa o modelo
 import 'package:runfit_app/utils/app_colors.dart'; // Para as cores
 import 'package:runfit_app/utils/app_styles.dart'; // Para os estilos
 import 'package:runfit_app/utils/app_constants.dart'; // Para os enums e extensão de String
-import 'package:image_picker/image_picker.dart'; // Para seleção de imagem (opcional)
-import 'dart:io'; // Para File (opcional)
-import 'package:flutter/foundation.dart' show kIsWeb; // Para kIsWeb (opcional)
+// REMOVIDO: import 'package:image_picker/image_picker.dart'; // Para seleção de imagem (opcional)
+// REMOVIDO: import 'dart:io'; // Para File (opcional)
+// REMOVIDO: import 'package:flutter/foundation.dart' show kIsWeb; // Para kIsWeb (opcional)
 import 'package:firebase_auth/firebase_auth.dart'; // Importar Firebase Auth
 
 
@@ -24,7 +24,7 @@ class WorkoutSheetFormScreen extends StatefulWidget {
 class _WorkoutSheetFormScreenState extends State<WorkoutSheetFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final Uuid _uuid = const Uuid();
-  final ImagePicker _picker = ImagePicker(); // Para seleção de imagem
+  // REMOVIDO: final ImagePicker _picker = ImagePicker(); // Para seleção de imagem
 
   late String _sheetId;
   late TextEditingController _nameController;
@@ -132,7 +132,7 @@ class _WorkoutSheetFormScreenState extends State<WorkoutSheetFormScreen> {
     final TextEditingController setsRepsController = TextEditingController(text: exercise?.setsReps);
     final TextEditingController loadController = TextEditingController(text: exercise?.load);
     final TextEditingController notesController = TextEditingController(text: exercise?.notes);
-    String? imageUrl = exercise?.imageUrl; // Para armazenar o caminho da imagem
+    // REMOVIDO: String? imageUrl = exercise?.imageUrl; // Para armazenar o caminho da imagem
 
     final _exerciseFormKey = GlobalKey<FormState>();
 
@@ -231,44 +231,10 @@ class _WorkoutSheetFormScreenState extends State<WorkoutSheetFormScreen> {
                                   decoration: const InputDecoration(labelText: 'Notas (opcional)'),
                                   maxLines: 3,
                                 ),
-                                const SizedBox(height: 16),
-                                // Seletor de Imagem (simplificado, sem persistência real de arquivo)
-                                // Para o MVP sem DB, vamos apenas permitir a inserção de caminhos de assets existentes
-                                TextFormField(
-                                  initialValue: imageUrl, // Exibe o caminho atual
-                                  decoration: const InputDecoration(
-                                    labelText: 'Caminho da Imagem (assets/images/...)',
-                                    hintText: 'Ex: images/AgachamentoLivre.webp',
-                                  ),
-                                  style: AppStyles.bodyStyle,
-                                  onChanged: (value) {
-                                    imageUrl = value; // Atualiza a variável local
-                                  },
-                                ),
-                                // Botão para abrir o seletor de imagens da galeria/câmera (se a imagem for persistida, isso seria útil)
-                                // Por enquanto, como não estamos persistindo a imagem localmente com image_picker
-                                // de forma complexa (apenas o path), esta parte é mais um placeholder ou para Web
-                                const SizedBox(height: 16),
-                                if (imageUrl != null && imageUrl!.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(8.0),
-                                      child: Image.asset(
-                                        imageUrl!,
-                                        height: 150,
-                                        width: double.infinity,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) => Container(
-                                          height: 150,
-                                          color: AppColors.borderColor,
-                                          child: Center(
-                                            child: Icon(Icons.image_not_supported, color: AppColors.textSecondaryColor),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                                // REMOVIDO: Seletor de Imagem (simplificado, sem persistência real de arquivo)
+                                // REMOVIDO: TextFormField para imageUrl
+                                // REMOVIDO: const SizedBox(height: 16),
+                                // REMOVIDO: Exibição da imagem (if (imageUrl != null && imageUrl!.isNotEmpty))
                                 const SizedBox(height: 24),
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.end,
@@ -286,7 +252,7 @@ class _WorkoutSheetFormScreenState extends State<WorkoutSheetFormScreen> {
                                             setsReps: setsRepsController.text.trim(),
                                             load: loadController.text.trim().isEmpty ? null : loadController.text.trim(),
                                             notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
-                                            imageUrl: imageUrl?.isEmpty ?? true ? null : imageUrl, // Salva o caminho da imagem
+                                            imageUrl: null, // Sempre nulo, já que removemos a opção de inserir imagem
                                             isCompleted: false,
                                           );
                                           Navigator.of(context).pop(newExercise); // Retorna o exercício salvo
