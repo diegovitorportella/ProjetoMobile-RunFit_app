@@ -80,7 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  'Bem-vindo de volta!',
+                  'Bem-vindo ao RunFit!',
                   style: AppStyles.headingStyle,
                   textAlign: TextAlign.center,
                 ),

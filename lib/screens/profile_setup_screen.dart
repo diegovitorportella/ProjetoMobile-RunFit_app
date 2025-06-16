@@ -308,10 +308,29 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 dropdownColor: AppColors.cardColor,
                 items: WorkoutFrequency.values.map((WorkoutFrequency value) {
                   String formattedName = '';
-                  if (value == WorkoutFrequency.duasVezesPorSemana) formattedName = '2x por semana';
-                  if (value == WorkoutFrequency.tresVezesPorSemana) formattedName = '3x por semana';
-                  if (value == WorkoutFrequency.cincoVezesPorSemana) formattedName = '5x por semana';
-
+                  switch (value) {
+                    case WorkoutFrequency.oneTimePerWeek:
+                      formattedName = '1x por semana';
+                      break;
+                    case WorkoutFrequency.twoTimesPerWeek:
+                      formattedName = '2x por semana';
+                      break;
+                    case WorkoutFrequency.threeTimesPerWeek:
+                      formattedName = '3x por semana';
+                      break;
+                    case WorkoutFrequency.fourTimesPerWeek: // NOVO
+                      formattedName = '4x por semana';
+                      break;
+                    case WorkoutFrequency.fiveTimesPerWeek:
+                      formattedName = '5x por semana';
+                      break;
+                    case WorkoutFrequency.sixTimesPerWeek: // NOVO
+                      formattedName = '6x por semana';
+                      break;
+                    case WorkoutFrequency.sevenTimesPerWeek: // NOVO
+                      formattedName = '7x por semana';
+                      break;
+                  }
                   return DropdownMenuItem<String>(
                     value: value.name,
                     child: Text(formattedName, style: AppStyles.bodyStyle),

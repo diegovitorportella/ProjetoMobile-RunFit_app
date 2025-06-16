@@ -8,9 +8,13 @@ extension StringCasingExtension on String {
 
 // Enums para as opções de configuração do usuário (mantidos para categorizar WorkoutSheets)
 enum WorkoutFrequency {
-  duasVezesPorSemana,
-  tresVezesPorSemana,
-  cincoVezesPorSemana,
+  oneTimePerWeek, // NOVO
+  twoTimesPerWeek, // EXISTENTE
+  threeTimesPerWeek, // EXISTENTE
+  fourTimesPerWeek, // NOVO
+  fiveTimesPerWeek, // EXISTENTE
+  sixTimesPerWeek,  // NOVO
+  sevenTimesPerWeek, // NOVO
   // Podemos adicionar mais opções de frequência se necessário
 }
 

@@ -103,7 +103,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _weightController.text = (profileData['weight'] ?? '').toString();
           _userModality = profileData['modality'];
           _userLevel = profileData['level'];
-          _userFrequency = profileData['frequency'];
+
+          // Lógica para mapear as strings antigas de frequência para os novos nomes do enum
+          String? loadedFrequency = profileData['frequency'];
+          if (loadedFrequency != null) {
+            switch (loadedFrequency) {
+              case 'duasVezesPorSemana':
+                _userFrequency = WorkoutFrequency.twoTimesPerWeek.name;
+                break;
+              case 'tresVezesPorSemana':
+                _userFrequency = WorkoutFrequency.threeTimesPerWeek.name;
+                break;
+              case 'cincoVezesPorSemana':
+                _userFrequency = WorkoutFrequency.fiveTimesPerWeek.name;
+                break;
+            // Para as novas entradas, elas já devem estar corretas se forem salvas com os novos nomes
+              case 'oneTimePerWeek':
+              case 'fourTimesPerWeek':
+              case 'sixTimesPerWeek':
+              case 'sevenTimesPerWeek':
+                _userFrequency = loadedFrequency;
+                break;
+              default:
+                _userFrequency = null; // Caso um valor desconhecido seja encontrado
+            }
+          } else {
+            _userFrequency = null;
+          }
         });
       } else {
         // Se não houver dados de perfil no Firebase, significa que o usuário
@@ -120,7 +146,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _weightController.text = '';
           _userModality = null;
           _userLevel = null;
-          _userFrequency = null;
+          _userFrequency = null; // Definir como null para que o validador atue
         });
       }
     } catch (e) {
@@ -533,10 +559,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 dropdownColor: AppColors.cardColor,
                 items: WorkoutFrequency.values.map((WorkoutFrequency value) {
                   String formattedName = '';
-                  if (value == WorkoutFrequency.duasVezesPorSemana) formattedName = '2x por semana';
-                  if (value == WorkoutFrequency.tresVezesPorSemana) formattedName = '3x por semana';
-                  if (value == WorkoutFrequency.cincoVezesPorSemana) formattedName = '5x por semana';
-
+                  switch (value) {
+                    case WorkoutFrequency.oneTimePerWeek:
+                      formattedName = '1x por semana';
+                      break;
+                    case WorkoutFrequency.twoTimesPerWeek:
+                      formattedName = '2x por semana';
+                      break;
+                    case WorkoutFrequency.threeTimesPerWeek:
+                      formattedName = '3x por semana';
+                      break;
+                    case WorkoutFrequency.fourTimesPerWeek: // NEW
+                      formattedName = '4x por semana';
+                      break;
+                    case WorkoutFrequency.fiveTimesPerWeek:
+                      formattedName = '5x por semana';
+                      break;
+                    case WorkoutFrequency.sixTimesPerWeek: // NEW
+                      formattedName = '6x por semana';
+                      break;
+                    case WorkoutFrequency.sevenTimesPerWeek: // NEW
+                      formattedName = '7x por semana';
+                      break;
+                  }
                   return DropdownMenuItem<String>(
                     value: value.name,
                     child: Text(formattedName, style: AppStyles.bodyStyle),

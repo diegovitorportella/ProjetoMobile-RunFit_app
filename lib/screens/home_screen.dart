@@ -13,10 +13,10 @@ import 'package:runfit_app/data/models/activity_history_entry.dart';
 import 'package:uuid/uuid.dart';
 import 'package:runfit_app/screens/activity_history_screen.dart';
 import 'package:runfit_app/services/achievement_service.dart';
-import 'package:runfit_app/data/models/achievement.dart'; // <--- ADICIONE ESTA LINHA
-import 'package:runfit_app/screens/profile_screen.dart'; // <--- ADICIONE ESTA LINHA
-import 'package:runfit_app/screens/achievements_screen.dart'; // <--- ADICIONE ESTA LINHA
-import 'package:runfit_app/screens/activity_selection_screen.dart'; // <--- ADICIONE ESTA LINHA
+import 'package:runfit_app/data/models/achievement.dart';
+import 'package:runfit_app/screens/profile_screen.dart';
+import 'package:runfit_app/screens/achievements_screen.dart';
+import 'package:runfit_app/screens/activity_selection_screen.dart';
 import 'package:runfit_app/services/goal_service.dart';
 import 'package:runfit_app/data/models/goal.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -111,17 +111,43 @@ class _HomeScreenState extends State<HomeScreen> {
           _userLevel = profileData['level'] ?? 'N/A';
           String? freq = profileData['frequency'];
           if (freq != null) {
-            if (freq == WorkoutFrequency.duasVezesPorSemana.name) {
-              _userFrequency = '2x por semana';
-            } else if (freq == WorkoutFrequency.tresVezesPorSemana.name) {
-              _userFrequency = '3x por semana';
-            } else if (freq == WorkoutFrequency.cincoVezesPorSemana.name) {
-              _userFrequency = '5x por semana';
-            } else {
-              _userFrequency = 'N/A';
+            // Atualizado para tratar de 1 a 7 vezes por semana
+            switch (freq) {
+              case 'oneTimePerWeek':
+                _userFrequency = '1x por semana';
+                _targetWorkoutsThisWeek = 1;
+                break;
+              case 'twoTimesPerWeek':
+                _userFrequency = '2x por semana';
+                _targetWorkoutsThisWeek = 2;
+                break;
+              case 'threeTimesPerWeek':
+                _userFrequency = '3x por semana';
+                _targetWorkoutsThisWeek = 3;
+                break;
+              case 'fourTimesPerWeek':
+                _userFrequency = '4x por semana';
+                _targetWorkoutsThisWeek = 4;
+                break;
+              case 'fiveTimesPerWeek':
+                _userFrequency = '5x por semana';
+                _targetWorkoutsThisWeek = 5;
+                break;
+              case 'sixTimesPerWeek':
+                _userFrequency = '6x por semana';
+                _targetWorkoutsThisWeek = 6;
+                break;
+              case 'sevenTimesPerWeek':
+                _userFrequency = '7x por semana';
+                _targetWorkoutsThisWeek = 7;
+                break;
+              default:
+                _userFrequency = 'N/A';
+                _targetWorkoutsThisWeek = 0;
             }
           } else {
             _userFrequency = 'N/A';
+            _targetWorkoutsThisWeek = 0;
           }
         });
       } else {
@@ -130,6 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _userModality = 'N/A';
           _userLevel = 'N/A';
           _userFrequency = 'N/A';
+          _targetWorkoutsThisWeek = 0;
         });
       }
     } catch (e) {
@@ -141,6 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _userModality = 'N/A';
           _userLevel = 'N/A';
           _userFrequency = 'N/A';
+          _targetWorkoutsThisWeek = 0;
         });
       }
     }
@@ -148,16 +176,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) {
       setState(() {
         _completedWorkoutsThisWeek = prefs.getInt(SharedPreferencesKeys.completedWorkoutsThisWeek) ?? 0;
-        // Certificar-se que _userFrequency é tratado como String antes de comparação
-        if (_userFrequency == '2x por semana') {
-          _targetWorkoutsThisWeek = 2;
-        } else if (_userFrequency == '3x por semana') {
-          _targetWorkoutsThisWeek = 3;
-        } else if (_userFrequency == '5x por semana') {
-          _targetWorkoutsThisWeek = 5;
-        } else {
-          _targetWorkoutsThisWeek = 0;
-        }
+        // _targetWorkoutsThisWeek já é definido acima com base nos dados do Firebase
+        // Não é necessário recalcular aqui, a menos que haja um cenário de fallback específico.
       });
     }
   }
@@ -502,7 +522,17 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text('Início'),
+        // Remova a logo do 'title' e use 'leading'
+        leading: Padding( // Adiciona um Padding para ajustar o espaçamento se necessário
+          padding: const EdgeInsets.only(left: 16.0), // Ajuste o valor do padding conforme desejar
+          child: Image.asset(
+            'assets/images/logo_inicio.png', // Caminho para sua logo
+            height: 50, // Tamanho que você ajustou
+            width: 50,  // Tamanho que você ajustou
+          ),
+        ),
+        title: const Text('Início'), // O texto permanece centralizado por padrão
+        centerTitle: true, // Garante que o título seja centralizado, se não estiver já na ThemeData
         actions: [
           IconButton(
             icon: const Icon(Icons.history),
